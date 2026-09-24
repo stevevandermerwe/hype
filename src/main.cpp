@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
     bool windowless = command;
     for (int i = 1; i < argc; ++i) {
         const QByteArray argument(argv[i]);
-        for (const char *option : {"--pdf", "--pptx", "--render", "--help", "--version"})
+        for (const char *option : {"--pdf", "--pptx", "--html", "--render", "--help", "--version"})
             windowless = windowless || argument.startsWith(option);
         windowless = windowless || argument == "-h" || argument == "-v";
     }
@@ -91,6 +91,7 @@ int main(int argc, char **argv) {
     args.addPositionalArgument("presentation", "Markdown presentation");
     args.addOption({"pdf", "Export PDF and exit", "file"});
     args.addOption({"pptx", "Export rendered PowerPoint and exit", "file"});
+    args.addOption({"html", "Export self-contained HTML slideshow and exit", "file"});
     args.addOption({"render", "Render slide PNGs and manifest and exit", "directory"});
     args.addOption({"theme", "Apply installed theme", "name"});
     args.addOption({"save", "Save changes (for theme snapshots)"});
@@ -113,7 +114,7 @@ int main(int argc, char **argv) {
         fflush(stdout);
     };
     if (exportWorker) {
-        if (!args.isSet("pdf") && !args.isSet("pptx")) return 1;
+        if (!args.isSet("pdf") && !args.isSet("pptx") && !args.isSet("html")) return 1;
         if (!deck.loadExportSnapshot(args.value(snapshotOption))) {
             report({{"error", deck.status()}});
             return 1;
@@ -123,7 +124,7 @@ int main(int argc, char **argv) {
         });
     }
     auto positional = args.positionalArguments();
-    const bool exporting = args.isSet("pdf") || args.isSet("pptx") || args.isSet("render");
+    const bool exporting = args.isSet("pdf") || args.isSet("pptx") || args.isSet("html") || args.isSet("render");
     if (exporting && positional.isEmpty() && !exportWorker) {
         fprintf(stderr, "Name a Markdown presentation to export.\n");
         return 1;
@@ -141,11 +142,12 @@ int main(int argc, char **argv) {
     if (args.isSet("slide"))
         deck.select(args.value("slide").toInt() - 1);
     bool success = true, headless = false;
-    for (const QString &option : {QString("pdf"), QString("pptx"), QString("render")})
+    for (const QString &option : {QString("pdf"), QString("pptx"), QString("html"), QString("render")})
         if (args.isSet(option)) {
             headless = true;
             success = success && (option == "pdf"    ? deck.exportPdf(args.value(option))
                                   : option == "pptx" ? deck.exportPptx(args.value(option))
+                                  : option == "html" ? deck.exportHtml(args.value(option))
                                                      : deck.renderImages(args.value(option)));
         }
     if (headless) {

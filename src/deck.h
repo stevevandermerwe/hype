@@ -7,7 +7,11 @@
 #include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
+#include "assetstore.h"
+#include "recovery.h"
+#include "themecatalog.h"
 class QProcess;
+class Recovery;
 
 struct Slide {
     QString source;
@@ -56,7 +60,7 @@ class Deck : public QAbstractListModel {
   public:
     explicit Deck(QObject *parent = nullptr, const QString &exportProgram = {});
     ~Deck() override;
-    bool compressingImage() const { return m_compressingImage; }
+    bool compressingImage() const { return m_assets.compressingImage(); }
     bool exporting() const { return m_exporting; }
     double exportProgress() const { return m_exportProgress; }
     QString exportStatus() const { return m_exportStatus; }
@@ -174,39 +178,25 @@ class Deck : public QAbstractListModel {
     ParsedDeck m_parsed;
     int m_selected = 0, m_anchor = 0, m_revision = 0;
     QVector<State> m_undo, m_redo;
-    QMap<QString, QString> m_themes;
+    ThemeCatalog m_themes;
     QFileSystemWatcher m_watcher;
     QTimer m_reloadTimer;
     bool m_externalChange = false;
-    QString m_recoveryDirectory, m_checkpointSource, m_checkpointPath;
-    QTimer m_autosaveTimer, m_autosaveDeadline;
-    bool m_recovering = false;
-    bool m_compressingImage = false;
-    quint64 m_pasteGeneration = 0;
     bool m_exporting = false, m_exportFailed = false;
     double m_exportProgress = 0;
     QString m_exportStatus;
     QString m_exportProgram;
     QProcess *m_exportProcess = nullptr;
     bool m_exportCancelled = false;
-    struct PendingPaste {
-        QString source, extension, path, document;
-        QByteArray data;
-        bool video = false;
-        int selected = 0;
-    } m_paste;
+    AssetStore m_assets;
+    Recovery m_recovery;
+    friend class Recovery;
     void apply(const QString &source, int selected, bool history = true, int anchor = -1,
                const ParsedDeck *structure = nullptr);
     void replaceHeader(const QString &header);
     void replaceSlides(const QStringList &slides, int selected, int anchor = -1);
     bool confirmDiscard();
     bool validateStructure(const QString &operation);
-    bool checkpoint();
-    void recoverDraft();
-    void retireDraft();
-    QString recoveryFolder() const;
-    bool restoreSnapshot(const QByteArray &bytes, bool opening);
-    void discoverThemes();
     void watch();
     void reloadExternal(const QString &disk);
 };

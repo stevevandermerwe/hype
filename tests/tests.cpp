@@ -2792,6 +2792,31 @@ class HypeTests : public QObject {
             }
         }
     }
+    void underscoreUnderlineAndStrikethrough() {
+        Deck deck;
+        QTextDocument doc;
+        layoutSlideText(doc, "_under_ and ~~struck~~ and `a_b`", deck.palette(), 60, 1660, false, false);
+        const QString plain = doc.toPlainText();
+        auto formatAt = [&](int position) {
+            QTextCursor cursor(&doc);
+            cursor.setPosition(position);
+            cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+            return cursor.charFormat();
+        };
+        auto span = [&](const QString &word, bool underline, bool strike) {
+            const int pos = plain.indexOf(word);
+            QVERIFY2(pos >= 0, qPrintable(word + " not found in [" + plain + "]"));
+            for (int i = 0; i < word.size(); ++i) {
+                const auto format = formatAt(pos + i);
+                QCOMPARE(format.fontUnderline(), underline);
+                QCOMPARE(format.fontStrikeOut(), strike);
+            }
+        };
+        span("under", true, false);
+        span("struck", false, true);
+        // Underscores inside a code span stay literal, not underlined.
+        span("a_b", false, false);
+    }
     void rustSyntaxColors() {
         Deck deck;
         for (const QString &language : {QString("rust"), QString("rs"), QString("Rust")}) {

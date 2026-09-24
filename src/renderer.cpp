@@ -503,10 +503,39 @@ static void sizeSlideText(QTextDocument &doc, const QVariantMap &palette, qreal 
         }
     doc.setTextWidth(width);
 }
+// Hype reads _underscores_ as underline and *asterisks* as italic. Qt's Markdown
+// importer leaves _text_ unformatted and ignores ~~strikethrough~~, but it does
+// honour <u> and <s>, so rewrite those two to inline tags before parsing. Code
+// (fences, indented blocks, inline spans) and __/___ strong markers stay intact.
+static QString applyInlineFormatting(QString markdown) {
+    const QString masked = outsideCode(markdown);
+    struct Span {
+        int start, end;
+        QString replacement;
+    };
+    QVector<Span> spans;
+    static const QRegularExpression underline("(^|[^\\w_])_([^\\s_][^_]*?[^\\s_])_([^\\w_]|$)");
+    auto u = underline.globalMatch(masked);
+    while (u.hasNext()) {
+        const auto m = u.next();
+        spans.append({int(m.capturedStart(2)) - 1, int(m.capturedEnd(2)) + 1, "<u>" + m.captured(2) + "</u>"});
+    }
+    static const QRegularExpression strike("~~([^~\\s](?:[^~]*[^~\\s])?)~~");
+    auto s = strike.globalMatch(masked);
+    while (s.hasNext()) {
+        const auto m = s.next();
+        spans.append({int(m.capturedStart()), int(m.capturedEnd()), "<s>" + m.captured(1) + "</s>"});
+    }
+    std::sort(spans.begin(), spans.end(), [](const Span &a, const Span &b) { return a.start > b.start; });
+    for (const auto &span : spans)
+        markdown.replace(span.start, span.end - span.start, span.replacement);
+    return markdown;
+}
 void layoutSlideText(QTextDocument &doc, const QString &markdown, const QVariantMap &palette,
                      qreal fontSize, qreal width, bool centered, bool code) {
     doc.setUndoRedoEnabled(false);
-    doc.setMarkdown(preserveLineBreaks(markdown), QTextDocument::MarkdownDialectGitHub);
+    doc.setMarkdown(preserveLineBreaks(applyInlineFormatting(markdown)),
+                    QTextDocument::MarkdownDialectGitHub);
     sizeSlideText(doc, palette, fontSize, width, centered, code);
 }
 static QMutex fitMutex;

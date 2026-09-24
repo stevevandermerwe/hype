@@ -143,11 +143,13 @@ Click **Present** or press **Ctrl+Space** (or **F5**) to toggle fullscreen prese
 
 Finished videos hold their last frame. Press Space again to replay from the beginning.
 
-Choose **Export as PDF** or **Export as PowerPoint** from the file menu in the top bar, or press **Ctrl+E** for PDF and **Ctrl+Shift+E** for PowerPoint, to share your presentation. Both exports are built into Hype. PowerPoint renders slides and converted animations at 4K (3840 × 2160). Slides preserve the rendered appearance rather than exposing editable text and shapes; the receiving computer does not need your fonts installed. Videos are embedded, and animated WebP/GIF images are converted to MP4 automatically without changing the original files. PDF captures still slides.
+Choose **Export as PDF**, **Export as PowerPoint**, or **Export as HTML** from the file menu in the top bar, or press **Ctrl+E** for PDF and **Ctrl+Shift+E** for PowerPoint, to share your presentation. All three exports are built into Hype. PowerPoint renders slides and converted animations at 4K (3840 × 2160). Slides preserve the rendered appearance rather than exposing editable text and shapes; the receiving computer does not need your fonts installed. Videos are embedded, and animated WebP/GIF images are converted to MP4 automatically without changing the original files. PDF captures still slides.
 
 Export runs in the background. The top bar shows progress through rendering, video conversion, and packaging under the presentation name, with a **Cancel export** button. You can keep editing; the export uses the presentation as it was when you started. Failed or cancelled exports leave an existing file intact.
 
 PDF keeps text as vectors and sizes embedded images for their visible area at 4K, omitting unused pixels outside spanning crops. Images use lossless compression to preserve fine detail. Photo-heavy PDFs can be larger than JPEG-compressed exports because they avoid additional compression artifacts.
+
+HTML export produces a single self-contained `.html` file: every slide is embedded as a base64 image, so it opens in any browser with no network, fonts, or companion files needed. Arrow keys, Space, Page Up/Down, Home/End navigate; `F` toggles fullscreen and `G` shows the slide grid. Send it to anyone or host it as-is.
 
 PowerPoint export automatically converts other video formats, including WebM, to H.264 MP4 with AAC audio, leaving your originals untouched. Compatible MP4s are embedded directly. Use `fit` for videos that aren’t 16:9. Video autoplay and looping may vary between presentation apps; playback in Microsoft PowerPoint has not yet been verified.
 
@@ -161,7 +163,7 @@ hype check talk/presentation.md                   # every problem, with its slid
 hype slides talk/presentation.md                  # an outline: number, lines, headline, media
 hype render talk/presentation.md --slide 3 -o slide.png
 hype render talk/presentation.md -o slides/       # every slide, plus slides.json
-hype export talk/presentation.md talk.pdf         # or talk.pptx
+hype export talk/presentation.md talk.pdf         # or talk.pptx, talk.html
 hype themes
 ```
 

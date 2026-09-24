@@ -806,6 +806,7 @@ ApplicationWindow {
                     AppMenuSeparator {}
                     AppMenuItem { text: "Export as PDF…"; hint: "Ctrl+E"; enabled: !deck.exporting; onTriggered: deck.exportDialog("pdf") }
                     AppMenuItem { text: "Export as PowerPoint…"; hint: "Ctrl+Shift+E"; enabled: !deck.exporting; onTriggered: deck.exportDialog("pptx") }
+                    AppMenuItem { text: "Export as HTML…"; enabled: !deck.exporting; onTriggered: deck.exportDialog("html") }
                     AppMenuSeparator {}
                     AppMenuItem { text: "Version history…"; onTriggered: historyDialog.open() }
                 }

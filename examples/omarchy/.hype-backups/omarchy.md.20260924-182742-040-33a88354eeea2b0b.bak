@@ -1,15 +1,15 @@
 ---
 title: Omarchy
-theme: "tokyo-night"
-color_accent: "#7aa2f7"
-color_background: "#1a1b26"
-color_cyan: "#7dcfff"
-color_dark_foreground: "#565f89"
-color_foreground: "#c0caf5"
-color_green: "#9ece6a"
-color_magenta: "#bb9af7"
-color_red: "#f7768e"
-color_yellow: "#e0af68"
+theme: "gruvbox"
+color_accent: "#fabd2f"
+color_background: "#282828"
+color_cyan: "#83a598"
+color_dark_foreground: "#928374"
+color_foreground: "#ebdbb2"
+color_green: "#b8bb26"
+color_magenta: "#d3869b"
+color_red: "#fb4934"
+color_yellow: "#fabd2f"
 ---
 
 ![background=auto span](hero.svg)

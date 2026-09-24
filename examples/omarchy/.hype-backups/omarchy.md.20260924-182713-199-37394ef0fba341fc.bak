@@ -1,15 +1,6 @@
 ---
 title: Omarchy
-theme: "tokyo-night"
-color_accent: "#7aa2f7"
-color_background: "#1a1b26"
-color_cyan: "#7dcfff"
-color_dark_foreground: "#565f89"
-color_foreground: "#c0caf5"
-color_green: "#9ece6a"
-color_magenta: "#bb9af7"
-color_red: "#f7768e"
-color_yellow: "#e0af68"
+theme: tokyo-night
 ---
 
 ![background=auto span](hero.svg)

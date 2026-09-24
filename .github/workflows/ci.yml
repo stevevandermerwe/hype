@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            ffmpeg source-highlight \
+            libwebp-dev zlib1g-dev \
+            libgl1-mesa-dev \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xinerama0 libxkbcommon0 libdbus-1-3 \
+            python3-pip
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.2'
+          modules: 'qtbase qtdeclarative qtmultimedia qtpdf'
+          cache: true
+
+      - name: Install Python test dependencies
+        run: pip install PyYAML
+
+      # The bundled bin scripts default to qmake6 (Debian naming); the official
+      # Qt install exposes qmake, so point them at it.
+      - name: Build
+        run: QMAKE=qmake ./bin/build
+
+      - name: C++ tests
+        run: QMAKE=qmake ./bin/test
+
+      - name: Python CLI, export, shutdown, and trial tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
+  office:
+    name: LibreOffice round-trip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            ffmpeg source-highlight \
+            libwebp-dev zlib1g-dev \
+            libgl1-mesa-dev \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xinerama0 libxkbcommon0 libdbus-1-3 \
+            libreoffice-impress libreoffice-core fonts-liberation \
+            python3-pip
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.9.2'
+          modules: 'qtbase qtdeclarative qtmultimedia qtpdf'
+          cache: true
+
+      - name: Build
+        run: QMAKE=qmake ./bin/build
+
+      - name: Verify exported PowerPoint opens in LibreOffice
+        run: HYPE_OFFICE_TESTS=1 python3 -m unittest tests.test_export.ExportTests.test_libreoffice_opens_export

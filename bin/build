@@ -9,5 +9,5 @@ if [ -d /opt/homebrew/lib ] && [ -d /opt/homebrew/include ]; then
 fi
 mkdir -p "$ROOT/build"
 cd "$ROOT/build"
-qmake6 "$ROOT/hype.pro"
+"${QMAKE:-qmake6}" "$ROOT/hype.pro"
 make -j"$(nproc)"
