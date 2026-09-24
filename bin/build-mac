@@ -1,0 +1,157 @@
+#!/bin/sh
+# Builds a self-contained, signed Hype.app for macOS, and optionally a DMG.
+#
+# Usage:
+#   ./bin/build-mac             Build + bundle Qt + ad-hoc sign
+#   ./bin/build-mac --dmg       Also create dist/Hype-<version>.dmg
+#
+# For distribution outside the App Store, sign with a Developer ID and
+# notarize (see the macOS section of the README):
+#   CODESIGN_IDENTITY="Developer ID Application: ..." \
+#   NOTARY_PROFILE="hype-notary" ./bin/build-mac --dmg --notarize
+#
+# Requires Qt 6.9+ (with macdeployqt), Homebrew libwebp, and the Xcode command
+# line tools.
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+APP="$ROOT/build/hype.app"
+CPU_COUNT="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+QMAKE="${QMAKE:-qmake6}"
+WEBP_LIB=""
+
+usage() {
+    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+}
+
+# Homebrew puts libwebp under an opt path outside the default linker search
+# path. Expose it for the compiler and remember where to bundle it from.
+setup_webp() {
+    for prefix in /opt/homebrew /usr/local; do
+        if [ -f "$prefix/opt/webp/lib/libwebp.dylib" ] || [ -f "$prefix/lib/libwebp.dylib" ]; then
+            WEBP_LIB="${WEBP_LIB:-$prefix/opt/webp/lib}"
+            [ -d "$prefix/opt/webp/lib" ] || WEBP_LIB="$prefix/lib"
+            export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}$WEBP_LIB"
+            export CPATH="${CPATH:+$CPATH:}$prefix/opt/webp/include"
+            [ -d "$prefix/opt/webp/include" ] || export CPATH="${CPATH:+$CPATH:}$prefix/include"
+        fi
+    done
+    if [ -z "$WEBP_LIB" ]; then
+        echo "error: libwebp not found (brew install webp)" >&2
+        exit 1
+    fi
+}
+
+build() {
+    mkdir -p "$ROOT/build"
+    cd "$ROOT/build"
+    "$QMAKE" "$ROOT/hype.pro"
+    make -j"$CPU_COUNT"
+}
+
+# The same binary serves the CLI (export, check, render); those commands set
+# QT_QPA_PLATFORM=offscreen, so bundle that platform plugin too.
+bundle_offscreen() {
+    local plugins
+    plugins="$("$QMAKE" -query QT_INSTALL_PLUGINS 2>/dev/null || echo /opt/homebrew/share/qt/plugins)"
+    local src="$plugins/platforms/libqoffscreen.dylib"
+    [ -f "$src" ] || return 0
+    mkdir -p "$APP/Contents/PlugIns/platforms"
+    cp -L "$src" "$APP/Contents/PlugIns/platforms/libqoffscreen.dylib"
+}
+
+# Copy Homebrew's libwebp, libwebpdemux, and libsharpyuv into the bundle and
+# point the load commands at @executable_path/@loader_path so the app runs on
+# machines without Homebrew. macdeployqt only bundles Qt, not these.
+bundle_webp() {
+    local fw="$APP/Contents/Frameworks"
+    mkdir -p "$fw"
+    for lib in libwebpdemux.2.dylib libwebp.7.dylib libsharpyuv.0.dylib; do
+        [ -f "$WEBP_LIB/$lib" ] || { echo "error: $WEBP_LIB/$lib missing" >&2; exit 1; }
+        cp -L "$WEBP_LIB/$lib" "$fw/$lib"
+        chmod u+w "$fw/$lib"
+        install_name_tool -id "@loader_path/$lib" "$fw/$lib"
+    done
+    local bin="$APP/Contents/MacOS/hype"
+    install_name_tool -change "$WEBP_LIB/libwebp.7.dylib" \
+        "@executable_path/../Frameworks/libwebp.7.dylib" "$bin"
+    install_name_tool -change "$WEBP_LIB/libwebpdemux.2.dylib" \
+        "@executable_path/../Frameworks/libwebpdemux.2.dylib" "$bin"
+    # Inter-library references use @rpath today; resolve them locally.
+    install_name_tool -change "@rpath/libwebp.7.dylib" \
+        "@loader_path/libwebp.7.dylib" "$fw/libwebpdemux.2.dylib"
+    install_name_tool -change "@rpath/libsharpyuv.0.dylib" \
+        "@loader_path/libsharpyuv.0.dylib" "$fw/libwebp.7.dylib"
+    install_name_tool -change "@rpath/libsharpyuv.0.dylib" \
+        "@loader_path/libsharpyuv.0.dylib" "$fw/libwebpdemux.2.dylib"
+}
+
+# Sign every nested binary deepest-first, then seal the app bundle last. With no
+# CODESIGN_IDENTITY this is an ad-hoc signature; set it to a Developer ID for a
+# distributable, notarizable build.
+sign_app() {
+    local identity="${CODESIGN_IDENTITY:--}"
+    local opts="--options runtime --timestamp"
+    # Frameworks, flat dylibs (libwebp), plugins, and QML plugin modules.
+    find "$APP/Contents" \( -name '*.framework' -o -name '*.dylib' \) -print0 \
+        | sort -zr | while IFS= read -r -d '' item; do
+            codesign --force $opts --sign "$identity" "$item" >/dev/null 2>&1 || true
+        done
+    codesign --force $opts --entitlements "$ROOT/pkgbuild/macos/entitlements.plist" \
+        --sign "$identity" "$APP"
+}
+
+make_dmg() {
+    local version="$1"
+    local stage="$ROOT/build/dmg"
+    local out="$ROOT/dist/Hype-$version.dmg"
+    rm -rf "$stage"
+    mkdir -p "$stage" "$ROOT/dist"
+    cp -R "$APP" "$stage/Hype.app"
+    ln -s /Applications "$stage/Applications"
+    rm -f "$out"
+    hdiutil create -volname "Hype" -srcfolder "$stage" -ov -format UDZO "$out"
+    echo "Wrote $out"
+}
+
+main() {
+    local do_dmg=0 do_notarize=0
+    for arg in "$@"; do
+        case "$arg" in
+            --dmg) do_dmg=1 ;;
+            --notarize) do_notarize=1 ;;
+            -h|--help) usage ;;
+            *) echo "Unknown option: $arg" >&2; exit 1 ;;
+        esac
+    done
+    setup_webp
+    build
+    # Deploy Qt frameworks, plugins, and the QML modules imported by src/.
+    macdeployqt "$APP" -verbose=2 -always-overwrite -qmldir="$ROOT/src"
+    bundle_offscreen
+    bundle_webp
+    sign_app
+
+    if [ "$do_notarize" = 1 ]; then
+        [ -n "${NOTARY_PROFILE:-}" ] || { echo "error: set NOTARY_PROFILE to notarize" >&2; exit 1; }
+        ditto -c -k --keepParent "$APP" "$ROOT/build/hype.zip"
+        xcrun notarytool submit "$ROOT/build/hype.zip" \
+            --keychain-profile "$NOTARY_PROFILE" --wait
+        xcrun stapler staple "$APP"
+        echo "Notarized and stapled $APP"
+    fi
+
+    if [ "$do_dmg" = 1 ]; then
+        # macdeployqt embeds the bundle version; read it from the Info.plist.
+        local version
+        version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+            "$APP/Contents/Info.plist")"
+        make_dmg "$version"
+    fi
+
+    echo "Built $APP"
+    codesign --verify --deep --strict "$APP" && echo "Signature OK"
+}
+
+main "$@"

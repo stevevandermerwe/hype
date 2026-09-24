@@ -12,7 +12,7 @@ color_red: "#f7768e"
 color_yellow: "#e0af68"
 ---
 
-![span background=auto](hero.svg)
+![fit background=auto](hero.svg)
 
 # Omarchy
 
@@ -49,10 +49,6 @@ Beautiful, fun & agentic Linux.
 ---
 
 ![](themes.svg)
-
----
- 
-Hello
 
 ---
 

@@ -6,6 +6,18 @@ macx: QT += widgets
 CONFIG += c++17 release ltcg exceptions_off
 TARGET = hype
 TEMPLATE = app
+
+# Shared version: the About box, CLI --version, and the macOS bundle all read it.
+VERSION = 0.4.1
+
+macx {
+    # Stable reverse-DNS bundle identifier, independent of the build machine's
+    # Xcode template settings. Omarchy's domain is omarchy.org.
+    QMAKE_TARGET_BUNDLE_PREFIX = org.omarchy
+    ICON = pkgbuild/macos/Hype.icns
+    QMAKE_INFO_PLIST = pkgbuild/macos/Info.plist
+}
+
 HEADERS += src/deck.h src/renderer.h src/markdown.h
 SOURCES += src/main.cpp src/deck.cpp src/renderer.cpp src/markdown.cpp
 RESOURCES += src/resources.qrc

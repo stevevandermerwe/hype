@@ -5,6 +5,9 @@
 #include "themepreview.h"
 #ifdef Q_OS_MACOS
 #include <QApplication>
+#include <QFileOpenEvent>
+#include <functional>
+#include <unistd.h>
 #else
 #include <QGuiApplication>
 #endif
@@ -57,14 +60,57 @@ static void adoptDesktopFont() {
     font.setPointSizeF(size);
     QGuiApplication::setFont(font);
 }
+#ifdef Q_OS_MACOS
+// Finder and Dock opens arrive as Apple "open document" events, which Qt turns
+// into QFileOpenEvent. Collect them so the editor can open them like `hype open`.
+class HypeApplication : public QApplication {
+  public:
+    using QApplication::QApplication;
+    bool event(QEvent *event) override {
+        if (event->type() == QEvent::FileOpen) {
+            const QString file = static_cast<QFileOpenEvent *>(event)->file();
+            if (!file.isEmpty() && m_openHandler)
+                m_openHandler(file);
+            return true;
+        }
+        return QApplication::event(event);
+    }
+    void setOpenHandler(std::function<void(const QString &)> handler) {
+        m_openHandler = std::move(handler);
+    }
+
+  private:
+    std::function<void(const QString &)> m_openHandler;
+};
+#endif
 int main(int argc, char **argv) {
     // Hype themes itself. Qt's gtk3 platform theme only adds a use-after-free
     // inside GTK when the desktop theme changes under a running editor.
     qputenv("QT_QPA_PLATFORMTHEME", "generic");
+#ifdef Q_OS_MACOS
+    // GUI apps launched from Finder inherit a minimal PATH that omits Homebrew;
+    // Hype shells out to ffmpeg (export) and source-highlight (editor).
+    {
+        QString path = qEnvironmentVariable("PATH");
+        for (const char *dir : {"/opt/homebrew/bin", "/usr/local/bin"})
+            if (!path.split(':').contains(QLatin1String(dir)))
+                path.append(QLatin1Char(':')).append(QLatin1String(dir));
+        qputenv("PATH", path.toUtf8());
+    }
+#endif
     // Commands, exports and help draw no window, so they must not need a display,
     // even where the desktop exports QT_QPA_PLATFORM=wayland.
     // Bare hype prints help, as a command line tool should; launchers say hype open.
-    const bool command = argc == 1 || isCliCommand(argv[1]);
+#ifdef Q_OS_MACOS
+    // Finder and `open` launch the bundle with no arguments (the legacy -psn_
+    // process-serial argument is gone on modern macOS), so a bare invocation is
+    // ambiguous: it can be a double-clicked app or a CLI run from a terminal.
+    // A terminal has a TTY on stdin; LaunchServices does not.
+    const bool launchedFromFinder = argc == 1 && !isatty(STDIN_FILENO);
+#else
+    const bool launchedFromFinder = false;
+#endif
+    const bool command = (argc == 1 && !launchedFromFinder) || isCliCommand(argv[1]);
     bool windowless = command;
     for (int i = 1; i < argc; ++i) {
         const QByteArray argument(argv[i]);
@@ -75,7 +121,7 @@ int main(int argc, char **argv) {
     if (windowless)
         qputenv("QT_QPA_PLATFORM", "offscreen");
 #ifdef Q_OS_MACOS
-    QApplication app(argc, argv);
+    HypeApplication app(argc, argv);
 #else
     QGuiApplication app(argc, argv);
 #endif
@@ -105,8 +151,13 @@ int main(int argc, char **argv) {
     QStringList arguments = app.arguments();
     if (arguments.value(1) == "open")
         arguments.removeAt(1);
+    // LaunchServices passes a legacy process-serial argument on Finder launches.
+    arguments.removeIf([](const QString &argument) { return argument.startsWith("-psn_"); });
     args.process(arguments);
     Deck deck;
+#ifdef Q_OS_MACOS
+    app.setOpenHandler([&deck](const QString &file) { deck.loadPath(file, true); });
+#endif
     const bool exportWorker = args.isSet(snapshotOption);
     auto report = [](const QJsonObject &event) {
         const auto line = QJsonDocument(event).toJson(QJsonDocument::Compact);
