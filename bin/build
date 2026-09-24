@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+# Homebrew puts libwebp under /opt/homebrew, outside the default linker search
+# path. Expose its headers and libraries when present (macOS).
+if [ -d /opt/homebrew/lib ] && [ -d /opt/homebrew/include ]; then
+    export LIBRARY_PATH="${LIBRARY_PATH:+$LIBRARY_PATH:}/opt/homebrew/lib"
+    export CPATH="${CPATH:+$CPATH:}/opt/homebrew/include"
+fi
 mkdir -p "$ROOT/build"
 cd "$ROOT/build"
 qmake6 "$ROOT/hype.pro"

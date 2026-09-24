@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QStandardPaths>
 #include <cmath>
 
 static QColor mix(const QColor &base, const QColor &ink, double amount) {
@@ -20,7 +21,7 @@ static QColor contrastInk(const QColor &color) {
     return luminance > .179 ? QColor("#111111") : QColor("#ffffff");
 }
 AppTheme::AppTheme(QObject *parent)
-    : AppTheme(qEnvironmentVariable("XDG_STATE_HOME", QDir::homePath() + "/.local/state") +
+    : AppTheme(QStandardPaths::writableLocation(QStandardPaths::StateLocation) +
                    "/omarchy/current",
                parent) {}
 AppTheme::AppTheme(const QString &currentDirectory, QObject *parent)

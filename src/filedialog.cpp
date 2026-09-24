@@ -12,6 +12,9 @@
 #include <QScopeGuard>
 #include <QUrl>
 #include <QUuid>
+#ifdef Q_OS_MACOS
+#include <QFileDialog>
+#endif
 
 namespace {
 const QString service = "org.freedesktop.portal.Desktop";
@@ -36,6 +39,14 @@ const QDBusArgument &operator>>(const QDBusArgument &arg, Filter &filter) {
 
 QString FileDialog::choose(bool save, const QString &location, const QString &label,
                            const QStringList &patterns, QString *error) {
+#ifdef Q_OS_MACOS
+    // The freedesktop portal file chooser is unavailable on macOS. Use the native
+    // panels, which follow the same (save, location, label, patterns) convention.
+    const QString filterString = label + " (" + patterns.join(' ') + ")";
+    if (save)
+        return QFileDialog::getSaveFileName(nullptr, label, location, filterString);
+    return QFileDialog::getOpenFileName(nullptr, label, QDir(location).absolutePath(), filterString);
+#endif
     qDBusRegisterMetaType<FilterRule>();
     qDBusRegisterMetaType<FilterRules>();
     qDBusRegisterMetaType<Filter>();

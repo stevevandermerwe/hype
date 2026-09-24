@@ -1,6 +1,8 @@
 #include "deck.h"
 #include "animationexport.h"
+#include "markdown.h"
 #include "filedialog.h"
+#include "html.h"
 #include "images.h"
 #include "pptx.h"
 #include "renderer.h"
@@ -73,31 +75,22 @@ ParsedDeck parseDeck(const QString &source) {
         }
     }
     result.header = source.left(contentStart);
-    int start = contentStart, pos = start, fenceLength = 0, fenceStart = 0;
-    QChar fence;
-    static const QRegularExpression fenceRe("^ {0,3}(`{3,}|~{3,})(.*)$");
+    // A top-level --- inside a fenced code block is code, not a slide break.
+    // Fence scanning starts after front matter, exactly as the original did.
+    const auto fences = markdownFences(source, contentStart);
+    int start = contentStart, pos = start;
     while (pos < source.size()) {
         QString line = lineAt(pos, &next);
-        auto match = fenceRe.match(line);
-        if (match.hasMatch()) {
-            QString run = match.captured(1);
-            if (fenceLength == 0) {
-                fence = run[0];
-                fenceLength = run.size();
-                fenceStart = pos;
-            } else if (run[0] == fence && run.size() >= fenceLength &&
-                       match.captured(2).trimmed().isEmpty())
-                fenceLength = 0;
-        } else if (fenceLength == 0 && line == "---") {
+        if (line == "---" && !insideFence(fences, pos)) {
             result.slides.append({source.mid(start, pos - start), start, pos});
             start = next;
         }
         pos = next;
     }
     result.slides.append({source.mid(start), start, int(source.size())});
-    if (fenceLength && result.error.isEmpty()) {
+    if (fences.unclosedOffset >= 0 && result.error.isEmpty()) {
         result.error = "Unclosed code fence";
-        result.errorOffset = fenceStart;
+        result.errorOffset = fences.unclosedOffset;
     }
     return result;
 }
@@ -465,9 +458,14 @@ void Deck::redo() {
     apply(state.source, state.selected, false, state.anchor, &state.parsed);
 }
 void Deck::discoverThemes() {
-    QString root = qEnvironmentVariable("OMARCHY_PATH", QDir::homePath() + "/.local/share/omarchy");
-    QStringList roots{root + "/themes", QDir::homePath() + "/omarchy/themes",
-                      QDir::homePath() + "/.config/omarchy/themes"};
+    const QString omarchy = qEnvironmentVariable("OMARCHY_PATH");
+    QStringList roots;
+    if (!omarchy.isEmpty())
+        roots << omarchy + "/themes";
+    else
+        roots << QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/omarchy/themes";
+    roots << QDir::homePath() + "/omarchy/themes";
+    roots << QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + "/omarchy/themes";
     for (auto &r : roots)
         for (auto &name : QDir(r).entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
             QString path = r + "/" + name + "/colors.toml";
@@ -525,11 +523,23 @@ QString Deck::themeName() const { return scalar(m_parsed.header, "theme", "tokyo
 QVariantMap Deck::palette() const {
     if (!m_paletteCache.isEmpty() && m_paletteHeader == m_parsed.header)
         return m_paletteCache;
+    QVariantMap colors = paletteForTheme(themeName());
+    for (const auto &key : colors.keys()) {
+        QString v = scalar(m_parsed.header, "color_" + key);
+        if (QColor(v).isValid())
+            colors[key] = v;
+    }
+    colors["font"] = scalar(m_parsed.header, "font", "JetBrains Mono");
+    m_paletteHeader = m_parsed.header;
+    m_paletteCache = colors;
+    return colors;
+}
+QVariantMap Deck::paletteForTheme(const QString &name) const {
     QVariantMap colors{
         {"background", "#1a1b26"}, {"foreground", "#c0caf5"}, {"accent", "#7aa2f7"},
         {"green", "#9ece6a"},      {"red", "#f7768e"},        {"yellow", "#e0af68"},
         {"magenta", "#bb9af7"},    {"cyan", "#7dcfff"},       {"dark_foreground", "#787c99"}};
-    QFile f(m_themes.value(themeName()));
+    QFile f(m_themes.value(name));
     if (f.open(QIODevice::ReadOnly)) {
         QRegularExpression re("^([a-z_]+)\\s*=\\s*\"(#[0-9a-fA-F]{6})\"",
                               QRegularExpression::MultilineOption);
@@ -539,14 +549,6 @@ QVariantMap Deck::palette() const {
             colors[m.captured(1)] = m.captured(2);
         }
     }
-    for (const auto &key : colors.keys()) {
-        QString v = scalar(m_parsed.header, "color_" + key);
-        if (QColor(v).isValid())
-            colors[key] = v;
-    }
-    colors["font"] = scalar(m_parsed.header, "font", "JetBrains Mono");
-    m_paletteHeader = m_parsed.header;
-    m_paletteCache = colors;
     return colors;
 }
 QColor Deck::background() const { return QColor(palette()["background"].toString()); }
@@ -1109,6 +1111,9 @@ QString Deck::savePastedMedia(const QString &value) {
     setStatus("Added " + name);
     return {};
 }
+QStringList Deck::notes(int index) const {
+    return slideNotes(slide(index));
+}
 QString Deck::renderId(int index) const {
     auto &cached = m_renderIds[index];
     const QString source = slide(index), base = baseDir();
@@ -1484,6 +1489,21 @@ bool Deck::renderImages(const QString &directory, int width, bool convertAnimati
     if (!manifest.open(QIODevice::WriteOnly))
         return false;
     manifest.write(QJsonDocument(QJsonObject{{"title", title()}, {"slides", slides}}).toJson());
+    return true;
+}
+bool Deck::exportHtml(const QString &path) {
+    if (!validateStructure("export"))
+        return false;
+    QTemporaryDir temp;
+    if (!renderImages(temp.path(), 1920, false))
+        return false;
+    emit exportAdvanced(1.0, "Packaging HTML…");
+    QString error;
+    if (!writeHtml(temp.path(), path, &error)) {
+        setStatus("HTML export failed: " + error);
+        return false;
+    }
+    setStatus("Exported " + path);
     return true;
 }
 bool Deck::exportPptx(const QString &path) {

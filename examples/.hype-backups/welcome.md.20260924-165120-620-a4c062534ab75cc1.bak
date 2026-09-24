@@ -1,13 +1,13 @@
 ---
 title: Hype
-font: "Arial"
+font: JetBrains Mono
 theme: tokyo-night
 ---
 
 # Your next idea
 
 Markdown in. A presentation out.
-<!-- Helllooooo -->
+
 ---
 
 # Keep it simple
@@ -21,7 +21,7 @@ Markdown in. A presentation out.
 
 > A presentation is a sequence of ideas.
 
-> > Steve was here
+> >  Steve was here
 > Give each one room to breathe.
 
 — Hype

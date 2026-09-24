@@ -1,5 +1,6 @@
 #include "renderer.h"
 #include "images.h"
+#include "markdown.h"
 #include "syntax.h"
 #include <QAbstractTextDocumentLayout>
 #include <QCache>
@@ -47,27 +48,15 @@ class ImageCache {
 };
 }
 static QString outsideCode(QString source, bool maskInline = true) {
-    int position = 0, fenceLength = 0;
-    QChar fence;
-    static const QRegularExpression marker("^ {0,3}(`{3,}|~{3,})(.*)$");
+    const auto fences = markdownFences(source);
+    int position = 0;
     while (position < source.size()) {
         int end = source.indexOf('\n', position);
         if (end < 0)
             end = source.size();
-        QString line = source.mid(position, end - position);
-        auto match = marker.match(line);
-        bool protectedLine = fenceLength > 0;
-        if (match.hasMatch()) {
-            QString run = match.captured(1);
-            protectedLine = true;
-            if (!fenceLength) {
-                fence = run[0];
-                fenceLength = run.size();
-            } else if (run[0] == fence && run.size() >= fenceLength &&
-                       match.captured(2).trimmed().isEmpty())
-                fenceLength = 0;
-        }
-        if (protectedLine || line.startsWith("    "))
+        const QString line = source.mid(position, end - position);
+        // Fenced lines, the fence lines themselves, and 4-space-indented lines are code.
+        if (insideFence(fences, position) || line.startsWith("    "))
             source.replace(position, end - position, QString(end - position, ' '));
         position = end + 1;
     }
@@ -94,6 +83,17 @@ static QString withoutComments(QString source) {
     for (auto it = ranges.crbegin(); it != ranges.crend(); ++it)
         source.remove(it->first, it->second);
     return source;
+}
+QStringList slideNotes(const QString &source) {
+    QStringList notes;
+    auto matches = QRegularExpression("<!--[\\s\\S]*?-->").globalMatch(outsideCode(source));
+    while (matches.hasNext()) {
+        const QString comment = matches.next().captured(0);
+        const QString text = comment.mid(4, comment.size() - 7).trimmed();
+        if (!text.isEmpty())
+            notes << text;
+    }
+    return notes;
 }
 static QString assetPath(const QString &base, QString file, bool video) {
     if (QFileInfo(file).isAbsolute())

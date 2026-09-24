@@ -21,6 +21,8 @@ QString withMediaDirectives(const QString &source, const QStringList &remove,
 Media parseMedia(const QString &source, const QString &base);
 QString ensurePoster(const QString &video, const QString &base);
 QStringList slideProblems(const QString &source, const QString &base);
+// Speaker notes: the text of each <!-- comment --> outside code fences and code.
+QStringList slideNotes(const QString &source);
 void layoutSlideText(QTextDocument &document, const QString &markdown, const QVariantMap &palette,
                      qreal fontSize, qreal width, bool centered, bool code);
 void paintSlide(QPainter *painter, const QRectF &target, const QString &source, const QString &base,

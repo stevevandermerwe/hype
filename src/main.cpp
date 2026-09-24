@@ -2,7 +2,12 @@
 #include "cli.h"
 #include "deck.h"
 #include "renderer.h"
+#include "themepreview.h"
+#ifdef Q_OS_MACOS
+#include <QApplication>
+#else
 #include <QGuiApplication>
+#endif
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -13,11 +18,29 @@
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickImageProvider>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QScopeGuard>
 #include <QTimer>
+#include <QUrl>
 #include <cstdio>
+
+// Renders a small sample slide for each installed theme, shown in the theme
+// picker as a live thumbnail (image://theme/<name>).
+class ThemePreviews : public QQuickImageProvider {
+  public:
+    explicit ThemePreviews(Deck *deck) : QQuickImageProvider(QQuickImageProvider::Image), m_deck(deck) {}
+    QImage requestImage(const QString &id, QSize *size, const QSize &requestedSize) override {
+        const QString name = QUrl::fromPercentEncoding(id.toUtf8());
+        const QSize target = requestedSize.isValid() ? requestedSize : QSize(240, 135);
+        if (size) *size = target;
+        return renderThemePreview(m_deck->paletteForTheme(name), target);
+    }
+
+  private:
+    Deck *m_deck;
+};
 // The desktop's interface font, e.g. "Adwaita Sans 11", which the gtk3 platform
 // theme used to supply. Without a settings portal Qt's default font stays.
 static void adoptDesktopFont() {
@@ -51,7 +74,11 @@ int main(int argc, char **argv) {
     }
     if (windowless)
         qputenv("QT_QPA_PLATFORM", "offscreen");
+#ifdef Q_OS_MACOS
+    QApplication app(argc, argv);
+#else
     QGuiApplication app(argc, argv);
+#endif
     app.setApplicationName("hype");
     app.setApplicationVersion("0.4.1");
     app.setDesktopFileName(qEnvironmentVariable("HYPE_DESKTOP_FILE", "hype"));
@@ -143,6 +170,7 @@ int main(int argc, char **argv) {
     engine.rootContext()->setContextProperty("deck", &deck);
     QPointer<Thumbnails> thumbnails = new Thumbnails(&deck);
     engine.addImageProvider("slides", thumbnails);
+    engine.addImageProvider("theme", new ThemePreviews(&deck));
     auto drainRenders = [thumbnails] {
         if (thumbnails)
             thumbnails->shutdown();

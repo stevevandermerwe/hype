@@ -4,12 +4,6 @@ font: "Arial"
 theme: tokyo-night
 ---
 
-# Your next idea
-
-Markdown in. A presentation out.
-<!-- Helllooooo -->
----
-
 # Keep it simple
 
 - Write in Markdown
@@ -25,6 +19,12 @@ Markdown in. A presentation out.
 > Give each one room to breathe.
 
 — Hype
+
+---
+
+# Your next idea
+
+Markdown in. A presentation out.
 
 ---
 

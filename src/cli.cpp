@@ -181,7 +181,7 @@ int check(const QStringList &arguments) {
 }
 
 int slides(const QStringList &arguments) {
-    Command command("slides", "Outline the slides: number, lines, headline, and media.");
+    Command command("slides", "Outline the slides: number, lines, headline, media, and notes.");
     command.json();
     command.parser.process(arguments);
     Deck deck;
@@ -195,7 +195,8 @@ int slides(const QStringList &arguments) {
         const int last = qMax(first, lastLine(deck.source(), parsed.slides[i]));
         const QString title = slideTitle(media.text);
         list << QJsonObject{{"slide", i + 1}, {"line", first}, {"endLine", last}, {"title", title},
-                            {"media", media.file.isEmpty() ? QJsonValue() : QJsonValue(media.file)}};
+                            {"media", media.file.isEmpty() ? QJsonValue() : QJsonValue(media.file)},
+                            {"notes", QJsonArray::fromStringList(slideNotes(parsed.slides[i].source))}};
         if (!command.parser.isSet("json"))
             print(stdout, QString("%1  %2  %3%4")
                               .arg(i + 1, 3)
@@ -279,19 +280,22 @@ int render(const QStringList &arguments) {
 }
 
 int exportDeck(const QStringList &arguments) {
-    Command command("export", "Export a presentation as PDF or PowerPoint, chosen by the file extension.");
-    command.parser.addPositionalArgument("output", "File ending in .pdf or .pptx", "<output>");
+    Command command("export", "Export a presentation as PDF, PowerPoint, or HTML, chosen by the file extension.");
+    command.parser.addPositionalArgument("output", "File ending in .pdf, .pptx, or .html", "<output>");
     command.json();
     command.parser.process(arguments);
     const QString output = command.argument(2);
     const QString format = QFileInfo(output).suffix().toLower();
-    if (format != "pdf" && format != "pptx")
-        return fail("Name an output file ending in .pdf or .pptx.");
+    if (format != "pdf" && format != "pptx" && format != "html")
+        return fail("Name an output file ending in .pdf, .pptx, or .html.");
     Deck deck;
     if (!command.load(deck))
         return 1;
     QDir().mkpath(QFileInfo(output).absolutePath());
-    if (!(format == "pdf" ? deck.exportPdf(output) : deck.exportPptx(output)))
+    const bool ok = format == "pdf"   ? deck.exportPdf(output)
+                    : format == "pptx" ? deck.exportPptx(output)
+                                       : deck.exportHtml(output);
+    if (!ok)
         return fail(deck.status());
     if (command.parser.isSet("json"))
         print({{"output", QFileInfo(output).absoluteFilePath()}, {"format", format}, {"slides", deck.count()}});
@@ -412,7 +416,7 @@ QString cliSummary() {
            "  check <presentation>            Report every problem, with slide and line\n"
            "  slides <presentation>           Outline the slides\n"
            "  render <presentation>           Render one slide or all of them to PNG\n"
-           "  export <presentation> <output>  Export PDF or PowerPoint\n"
+           "  export <presentation> <output>  Export PDF, PowerPoint, or HTML\n"
            "  themes                          List installed themes\n"
            "  help format                     How to write a presentation\n"
            "  skill [install]                 Print the skill for coding agents, or install it";

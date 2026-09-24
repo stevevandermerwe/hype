@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3840 2160" width="3840" height="2160">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d0c22"/>
+      <stop offset="1" stop-color="#191638"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1a38"/>
+      <stop offset="1" stop-color="#16142c"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="3840" height="2160" fill="url(#bg)"/>
+
+  <text x="1920" y="300" text-anchor="middle" font-family="system-ui, -apple-system, Arial, sans-serif" font-size="150" font-weight="800" fill="#ffffff">Pick a theme, change everything</text>
+  <text x="1920" y="430" text-anchor="middle" font-family="system-ui, -apple-system, Arial, sans-serif" font-size="66" fill="#9a95c9">Terminal, bar, notifications, wallpaper — all at once</text>
+
+  <!-- Theme swatch wall: 4 x 2 grid -->
+  <g font-family="system-ui, -apple-system, Arial, sans-serif">
+    <!-- Tokyo Night -->
+    <g transform="translate(360, 560)">
+      <rect width="720" height="340" rx="26" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+      <rect x="40" y="40" width="120" height="120" rx="18" fill="#1a1b26"/>
+      <rect x="176" y="40" width="120" height="120" rx="18" fill="#c0caf5"/>
+      <rect x="312" y="40" width="120" height="120" rx="18" fill="#7aa2f7"/>
+      <rect x="448" y="40" width="120" height="120" rx="18" fill="#bb9af7"/>
+      <rect x="584" y="40" width="96" height="120" rx="18" fill="#9ece6a"/>
+      <text x="40" y="280" font-size="64" font-weight="700" fill="#ffffff">Tokyo Night</text>
+    </g>
+
+    <!-- Catppuccin -->
+    <g transform="translate(1160, 560)">
+      <rect width="720" height="340" rx="26" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+      <rect x="40" y="40" width="120" height="120" rx="18" fill="#1e1e2e"/>
+      <rect x="176" y="40" width="120" height="120" rx="18" fill="#cdd6f4"/>
+      <rect x="312" y="40" width="120" height="120" rx="18" fill="#89b4fa"/>
+      <rect x="448" y="40" width="120" height="120" rx="18" fill="#cba6f7"/>
+      <rect x="584" y="40" width="96" height="120" rx="18" fill="#a6e3a1"/>
+      <text x="40" y="280" font-size="64" font-weight="700" fill="#ffffff">Catppuccin</text>
+    </g>
+
+    <!-- Nord -->
+    <g transform="translate(1960, 560)">
+      <rect width="720" height="340" rx="26" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+      <rect x="40" y="40" width="120" height="120" rx="18" fill="#2e3440"/>
+      <rect x="176" y="40" width="120" height="120" rx="18" fill="#d8dee9"/>
+      <rect x="312" y="40" width="120" height="120" rx="18" fill="#88c0d0"/>
+      <rect x="448" y="40" width="120" height="120" rx="18" fill="#81a1c1"/>
+      <rect x="584" y="40" width="96" height="120" rx="18" fill="#a3be8c"/>
+      <text x="40" y="280" font-size="64" font-weight="700" fill="#ffffff">Nord</text>
+    </g>
+
+    <!-- Gruvbox -->
+    <g transform="translate(2760, 560)">
+      <rect width="720" height="340" rx="26" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+      <rect x="40" y="40" width="120" height="120" rx="18" fill="#282828"/>
+      <rect x="176" y="40" width="120" height="120" rx="18" fill="#ebdbb2"/>
+      <rect x="312" y="40" width="120" height="120" rx="18" fill="#fabd2f"/>
+      <rect x="448" y="40" width="120" height="120" rx="18" fill="#fb4934"/>
+      <rect x="584" y="40" width="96" height="120" rx="18" fill="#b8bb26"/>
+      <text x="40" y="280" font-size="64" font-weight="700" fill="#ffffff">Gruvbox</text>
+    </g>
+
+    <!-- Everforest -->
+    <g transform="translate(360, 990)">
+      <rect width="720" height="340" rx="26" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+      <rect x="40" y="40" width="120" height="120" rx="18" fill="#232a2e"/>
+      <rect x="176" y="40" width="120" height="120" rx="18" fill="#d3c6aa"/>
+      <rect x="312" y="40" width="120" height="120" rx="18" fill="#a7c080"/>
+      <rect x="448" y="40" width="120" height="120" rx="18" fill="#7fbbb3"/>
+      <rect x="584" y="40" width="96" height="120" rx="18" fill="#e69875"/>
+      <text x="40" y="280" font-size="64" font-weight="700" fill="#ffffff">Everforest</text>
+    </g>
+
+    <!-- Rosé Pine -->
+    <g transform="translate(1160, 990)">
+      <rect width="720" height="340" rx="26" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+      <rect x="40" y="40" width="120" height="120" rx="18" fill="#191724"/>
+      <rect x="176" y="40" width="120" height="120" rx="18" fill="#e0def4"/>
+      <rect x="312" y="40" width="120" height="120" rx="18" fill="#ebbcba"/>
+      <rect x="448" y="40" width="120" height="120" rx="18" fill="#9ccfd8"/>
+      <rect x="584" y="40" width="96" height="120" rx="18" fill="#c4a7e7"/>
+      <text x="40" y="280" font-size="64" font-weight="700" fill="#ffffff">Rosé Pine</text>
+    </g>
+
+    <!-- Kanagawa -->
+    <g transform="translate(1960, 990)">
+      <rect width="720" height="340" rx="26" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+      <rect x="40" y="40" width="120" height="120" rx="18" fill="#1f1f28"/>
+      <rect x="176" y="40" width="120" height="120" rx="18" fill="#dcd7ba"/>
+      <rect x="312" y="40" width="120" height="120" rx="18" fill="#7e9cd8"/>
+      <rect x="448" y="40" width="120" height="120" rx="18" fill="#e46876"/>
+      <rect x="584" y="40" width="96" height="120" rx="18" fill="#98bb6c"/>
+      <text x="40" y="280" font-size="64" font-weight="700" fill="#ffffff">Kanagawa</text>
+    </g>
+
+    <!-- Osaka Jade -->
+    <g transform="translate(2760, 990)">
+      <rect width="720" height="340" rx="26" fill="url(#card)" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+      <rect x="40" y="40" width="120" height="120" rx="18" fill="#10101a"/>
+      <rect x="176" y="40" width="120" height="120" rx="18" fill="#d0d0d0"/>
+      <rect x="312" y="40" width="120" height="120" rx="18" fill="#4fd6be"/>
+      <rect x="448" y="40" width="120" height="120" rx="18" fill="#7aa2f7"/>
+      <rect x="584" y="40" width="96" height="120" rx="18" fill="#f7768e"/>
+      <text x="40" y="280" font-size="64" font-weight="700" fill="#ffffff">Osaka Jade</text>
+    </g>
+  </g>
+</svg>

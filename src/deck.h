@@ -92,6 +92,7 @@ class Deck : public QAbstractListModel {
     QColor foreground() const;
     QColor accent() const;
     QVariantMap palette() const;
+    QVariantMap paletteForTheme(const QString &name) const;
     QVariantMap media() const;
     QString baseDir() const;
     QString dialogDirectory() const;
@@ -106,6 +107,7 @@ class Deck : public QAbstractListModel {
     Q_INVOKABLE bool restoreVersion(const QString &name);
     bool exportPdf(const QString &path);
     bool exportPptx(const QString &path);
+    bool exportHtml(const QString &path);
     bool renderImages(const QString &directory, int width = 1920, bool convertAnimations = false);
     Q_INVOKABLE void select(int index);
     Q_INVOKABLE void extendSelection(int index);
@@ -133,6 +135,7 @@ class Deck : public QAbstractListModel {
     Q_INVOKABLE void cancelPaste();
     Q_INVOKABLE void exportDialog(const QString &format);
     Q_INVOKABLE QString renderId(int index) const;
+    Q_INVOKABLE QStringList notes(int index) const;
     Q_INVOKABLE void matchImageBackground(bool enabled);
     Q_INVOKABLE void setMediaBackground(const QString &mode);
     Q_INVOKABLE void setMediaMode(const QString &mode);

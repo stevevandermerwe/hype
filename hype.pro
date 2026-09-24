@@ -1,17 +1,23 @@
 QT += core gui qml quick quickcontrols2 multimedia concurrent dbus
+# macOS has no freedesktop portal; filedialog.cpp falls back to QFileDialog there.
+macx: QT += widgets
 # Like Qt's own modules, Hype never throws or catches. Without unwinding tables and with
 # link-time optimization, the installed binary is about a quarter smaller.
 CONFIG += c++17 release ltcg exceptions_off
 TARGET = hype
 TEMPLATE = app
-HEADERS += src/deck.h src/renderer.h
-SOURCES += src/main.cpp src/deck.cpp src/renderer.cpp
+HEADERS += src/deck.h src/renderer.h src/markdown.h
+SOURCES += src/main.cpp src/deck.cpp src/renderer.cpp src/markdown.cpp
 RESOURCES += src/resources.qrc
 
 SOURCES += src/syntax.cpp
 HEADERS += src/syntax.h
 SOURCES += src/pptx.cpp
 HEADERS += src/pptx.h
+SOURCES += src/html.cpp
+HEADERS += src/html.h
+SOURCES += src/themepreview.cpp
+HEADERS += src/themepreview.h
 LIBS += -lz -lwebpdemux -lwebp
 
 SOURCES += src/animationexport.cpp

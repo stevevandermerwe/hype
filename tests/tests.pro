@@ -3,8 +3,8 @@ CONFIG += c++17 testcase
 TEMPLATE = app
 TARGET = hype-tests
 INCLUDEPATH += ../src
-SOURCES += tests.cpp ../src/deck.cpp ../src/renderer.cpp
-HEADERS += ../src/deck.h ../src/renderer.h
+SOURCES += tests.cpp ../src/deck.cpp ../src/renderer.cpp ../src/markdown.cpp
+HEADERS += ../src/deck.h ../src/renderer.h ../src/markdown.h
 RESOURCES += ../src/resources.qrc
 
 SOURCES += ../src/syntax.cpp
@@ -15,6 +15,8 @@ LIBS += -lz -lwebpdemux -lwebp
 
 SOURCES += ../src/animationexport.cpp
 HEADERS += ../src/animationexport.h
+SOURCES += ../src/html.cpp
+HEADERS += ../src/html.h
 
 SOURCES += ../src/apptheme.cpp
 HEADERS += ../src/apptheme.h

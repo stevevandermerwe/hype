@@ -62,8 +62,8 @@ ApplicationWindow {
     property int dragScroll: 0
     function togglePresent() {
         presenting = !presenting
-        if (presenting) { win.showFullScreen(); stage.forceActiveFocus() }
-        else { player.stop(); win.showNormal() }
+        if (presenting) { win.showFullScreen(); stage.forceActiveFocus(); presenter.visible = true; presenter.elapsed = 0 }
+        else { player.stop(); win.showNormal(); presenter.visible = false }
     }
     function toggleVideo() {
         if (player.playbackState === MediaPlayer.PlayingState) player.pause()
@@ -423,6 +423,7 @@ ApplicationWindow {
     Shortcut { sequences: ["Return", "Enter"]; enabled: !win.popupOpen && !deck.compressingImage && win.overview && !win.presenting; onActivated: win.focusMarkdown() }
     Shortcut { enabled: !win.popupOpen && !deck.compressingImage; sequence: "Ctrl+N"; onActivated: deck.newDeck() }
     Shortcut { enabled: !win.popupOpen && !deck.compressingImage; sequences: ["F5", "Ctrl+Space"]; autoRepeat: false; onActivated: win.togglePresent() }
+    Shortcut { sequence: "P"; enabled: win.presenting; onActivated: presenter.visible = !presenter.visible }
     Shortcut { sequence: "Escape"; enabled: !win.popupOpen && !deck.compressingImage && (win.presenting); onActivated: win.togglePresent() }
     Shortcut { sequence: "Ctrl+Z"; enabled: !win.popupOpen && !deck.compressingImage && (!slideEditor.activeFocus && !sourceEditor.activeFocus); onActivated: deck.undo() }
     Shortcut { sequence: "Ctrl+Shift+Z"; enabled: !win.popupOpen && !deck.compressingImage && (!slideEditor.activeFocus && !sourceEditor.activeFocus); onActivated: deck.redo() }
@@ -697,9 +698,28 @@ ApplicationWindow {
                     required property string modelData
                     required property int index
                     width: themes.popup.availableWidth
+                    height: 76
                     text: modelData
                     highlighted: themes.highlightedIndex === index
-                    contentItem: Text { text: modelData; color: win.ui.foreground; font: themes.font; verticalAlignment: Text.AlignVCenter }
+                    contentItem: Item {
+                        Rectangle {
+                            x: 0; y: (parent.height - 68) / 2
+                            width: 120; height: 68; radius: 4; clip: true
+                            Image {
+                                anchors.fill: parent
+                                source: "image://theme/" + modelData
+                                sourceSize: Qt.size(120, 68)
+                                fillMode: Image.PreserveAspectCrop
+                                cache: true
+                            }
+                        }
+                        Text {
+                            x: 130; width: parent.width - 130
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData; color: win.ui.foreground; font: themes.font
+                            elide: Text.ElideRight
+                        }
+                    }
                     background: Rectangle { color: parent.highlighted ? win.ui.hover : win.ui.panel }
                 }
                 background: Rectangle { color: themes.hovered || themes.popup.visible ? win.ui.hover : "transparent"; radius: win.softRadius }
@@ -707,7 +727,7 @@ ApplicationWindow {
                 currentIndex: Math.max(0, deck.themeNames.indexOf(deck.themeName))
                 onActivated: deck.chooseTheme(currentText)
                 popup: Popup {
-                    y: themes.height + 4; width: 240; padding: 6
+                    y: themes.height + 4; width: 264; padding: 6
                     height: Math.min(contentItem.implicitHeight + 12, 420, win.height - 100)
                     background: Rectangle { color: win.ui.panel; border.color: win.ui.border; radius: win.rounding }
                     contentItem: ListView {
@@ -1282,4 +1302,57 @@ ApplicationWindow {
         }
     }
     MediaPlayer { id: player; objectName: "player"; videoOutput: video; audioOutput: AudioOutput { muted: deck.media.muted } loops: deck.media.loop ? MediaPlayer.Infinite : 1; onErrorOccurred: function(error,message) { deck.setStatus(message) } }
+
+    // Presenter view: notes, a next-slide preview, and an elapsed timer, shown
+    // beside the fullscreen presentation. Toggle with P while presenting.
+    Window {
+        id: presenter
+        visible: false
+        width: 460; height: 720
+        title: "Presenter — " + deck.title
+        color: win.ui.panel
+        flags: Qt.Window | Qt.WindowStaysOnTopHint
+        property int elapsed: 0
+        Timer { interval: 1000; running: presenter.visible; repeat: true; onTriggered: presenter.elapsed++ }
+        ColumnLayout {
+            anchors.fill: parent; anchors.margins: 18; spacing: 14
+            RowLayout {
+                Text { text: "Slide " + (deck.selected + 1) + " of " + deck.count; font.pixelSize: 15; font.bold: true; color: win.ui.foreground }
+                Item { Layout.fillWidth: true }
+                Text {
+                    font.pixelSize: 15; color: win.ui.accent
+                    text: {
+                        var m = Math.floor(presenter.elapsed / 60)
+                        var s = presenter.elapsed % 60
+                        return m + ":" + (s < 10 ? "0" : "") + s
+                    }
+                }
+            }
+            Text { text: "Next"; font.pixelSize: 12; color: win.ui.muted }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: width * 9 / 16
+                color: "#000000"
+                visible: deck.selected + 1 < deck.count
+                Image {
+                    anchors.fill: parent
+                    source: "image://slides/" + deck.renderId(deck.selected + 1)
+                    fillMode: Image.PreserveAspectFit
+                    cache: false
+                }
+            }
+            Text { text: "Notes"; font.pixelSize: 12; color: win.ui.muted }
+            ScrollView {
+                Layout.fillWidth: true; Layout.fillHeight: true
+                TextArea {
+                    readOnly: true
+                    text: deck.notes(deck.selected).join("\n\n")
+                    wrapMode: TextEdit.Wrap
+                    color: win.ui.foreground
+                    font.pixelSize: 15
+                    background: Rectangle { color: win.ui.background; radius: win.softRadius }
+                }
+            }
+        }
+    }
 }
