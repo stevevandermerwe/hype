@@ -6,3 +6,4 @@
 /pkgbuild/src/
 /pkgbuild/*.pkg.tar.*
 __pycache__/
+.hype-backups/
