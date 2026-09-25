@@ -1,7 +1,9 @@
 #include "cli.h"
 #include "deck.h"
+#include "generator.h"
 #include "renderer.h"
 #include <QCommandLineParser>
+#include <QEventLoop>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -344,6 +346,79 @@ int create(const QStringList &arguments) {
     return 0;
 }
 
+int generate(const QStringList &arguments) {
+    Command command("generate", "Write a new presentation folder from a prompt, using an AI model. Use - to read the prompt from stdin.", false);
+    command.parser.addPositionalArgument("prompt", "What the presentation is about", "<prompt>");
+    command.parser.addOption({{"o", "output"}, "Folder to create (default: a new folder named after the title)", "directory"});
+    command.parser.addOption({"theme", "Installed theme; see hype themes", "name"});
+    command.parser.addOption({"endpoint", "Chat completions URL (default: OpenRouter)", "url"});
+    command.parser.addOption({"model", "Model name at that endpoint", "name"});
+    command.parser.addOption({"template", "Prompt template file replacing the bundled one", "file"});
+    command.parser.addOption({"print-template", "Print the prompt template that would be sent, and exit"});
+    command.parser.addOption({"save", "Remember --endpoint, --model and --template for next time"});
+    command.json();
+    command.parser.process(arguments);
+    AiConfig config = loadAiConfig();
+    if (command.parser.isSet("endpoint")) config.endpoint = command.parser.value("endpoint");
+    if (command.parser.isSet("model")) config.model = command.parser.value("model");
+    if (command.parser.isSet("template")) config.templatePath = command.parser.value("template");
+    if (command.parser.isSet("save")) {
+        saveAiConfig(config);
+        print(stderr, "Saved AI settings.");
+    }
+    if (command.parser.isSet("print-template")) {
+        QString error;
+        const QString text = promptTemplate(config, &error);
+        if (text.isEmpty()) return fail(error);
+        fputs(qPrintable(text), stdout);
+        return 0;
+    }
+    QString prompt = command.argument(1);
+    if (prompt == "-") {
+        QFile input;
+        input.open(stdin, QIODevice::ReadOnly);
+        prompt = QString::fromUtf8(input.readAll());
+    }
+    if (prompt.trimmed().isEmpty())
+        return command.parser.isSet("save") ? 0 : fail("Describe the presentation, or use - to read the prompt from stdin.");
+    Generator generator;
+    generator.setConfig(config);
+    QEventLoop loop;
+    bool done = false;
+    int status = 1;
+    QString presentation;
+    QStringList warnings;
+    QObject::connect(&generator, &Generator::succeeded, &loop, [&](const QString &path, const QStringList &found) {
+        presentation = path;
+        warnings = found;
+        status = 0;
+        done = true;
+        loop.quit();
+    });
+    QObject::connect(&generator, &Generator::failed, &loop, [&](const QString &message) {
+        print(stderr, message);
+        done = true;
+        loop.quit();
+    });
+    print(stderr, "Generating with " + config.model + "…");
+    generator.generate(prompt, command.parser.value("theme"), command.parser.value("output"));
+    if (!done)
+        loop.exec();
+    if (status != 0)
+        return 1;
+    if (command.parser.isSet("json")) {
+        QJsonArray list;
+        for (const auto &warning : warnings)
+            list << warning;
+        print({{"presentation", presentation}, {"warnings", list}});
+    } else {
+        print(stdout, "Created " + presentation);
+        for (const auto &warning : warnings)
+            print(stderr, "warning: " + warning);
+    }
+    return 0;
+}
+
 int themes(const QStringList &arguments) {
     Command command("themes", "List the installed themes.", false);
     command.json();
@@ -417,12 +492,13 @@ QString cliSummary() {
            "  slides <presentation>           Outline the slides\n"
            "  render <presentation>           Render one slide or all of them to PNG\n"
            "  export <presentation> <output>  Export PDF, PowerPoint, or HTML\n"
+           "  generate <prompt>               Write a whole presentation folder with an AI model\n"
            "  themes                          List installed themes\n"
            "  help format                     How to write a presentation\n"
            "  skill [install]                 Print the skill for coding agents, or install it";
 }
 bool isCliCommand(const QString &word) {
-    return QStringList{"new", "check", "slides", "render", "export", "themes", "skill", "help"}.contains(word);
+    return QStringList{"new", "check", "slides", "render", "export", "generate", "themes", "skill", "help"}.contains(word);
 }
 int runCli(const QStringList &arguments) {
     const QString command = arguments.value(1);
@@ -431,6 +507,7 @@ int runCli(const QStringList &arguments) {
            : command == "slides" ? slides(arguments)
            : command == "render" ? render(arguments)
            : command == "export" ? exportDeck(arguments)
+           : command == "generate" ? generate(arguments)
            : command == "themes" ? themes(arguments)
            : command == "skill"  ? skill(arguments)
                                  : help(arguments);

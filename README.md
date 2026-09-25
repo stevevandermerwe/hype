@@ -153,6 +153,18 @@ HTML export produces a single self-contained `.html` file: every slide is embedd
 
 PowerPoint export automatically converts other video formats, including WebM, to H.264 MP4 with AAC audio, leaving your originals untouched. Compatible MP4s are embedded directly. Use `fit` for videos that aren’t 16:9. Video autoplay and looping may vary between presentation apps; playback in Microsoft PowerPoint has not yet been verified.
 
+## Generate a presentation with AI
+
+Choose **Generate with AI…** from the file menu, or run `hype generate "a 10-slide talk on why small teams ship faster"`. Hype sends your prompt, together with a template that teaches the model Hype's format, to any OpenAI-compatible chat endpoint (OpenRouter by default). The reply becomes a new folder holding `presentation.md` and SVG illustrations in `images/`; the editor opens it, and `hype check` finds any image the model forgot to write.
+
+New folders go in `~/Documents/Hype/<title>/` unless you pass `-o folder` (it must be new or empty). Pass `--theme` to pick a theme.
+
+**Endpoint and model.** Open *Endpoint and model* in the dialog, or use `--endpoint` and `--model` (add `--save` to remember them). Point the endpoint at OpenRouter, OpenAI, or a local server such as Ollama at `http://localhost:11434/v1/chat/completions`; local endpoints need no key.
+
+**API key.** The key is never written to Hype's settings. Hype reads `HYPE_AI_KEY`, else the variable named in the dialog (`OPENROUTER_API_KEY` by default). On macOS, apps started from Finder do not see shell variables, so paste the key into the dialog to store it in your login Keychain instead.
+
+**Template.** `hype generate --print-template` shows what is sent. Save a copy, edit it, and use it with `--template file.md` or the template field in the dialog. `{{format}}` expands to the format guide, and the reply must keep the `=== FILE: path ===` layout.
+
 ## Use Hype from the command line
 
 Hype's commands need no display, so a script or an AI agent can build a presentation from start to finish. A presentation is just a Markdown file: write it with any tool, then check, preview, and export it with `hype`.
