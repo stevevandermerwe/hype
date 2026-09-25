@@ -26,6 +26,7 @@ ApplicationWindow {
     property bool overview: false
     readonly property string mode: overview ? "overview" : markdown ? "markdown" : "visual"
     readonly property bool canFormat: !popupOpen && !deck.compressingImage && !presenting && !overview
+    readonly property bool toolbarLabels: width >= 1000
     readonly property int rowStep: overview && !presenting ? overviewGrid.columns : 1
     readonly property int inset: 20
     property string flash: ""
@@ -452,6 +453,8 @@ ApplicationWindow {
         id: toolbarButton
         required property string iconName
         required property string description
+        property string label: ""
+        readonly property bool labeled: label !== "" && win.toolbarLabels
         property bool primary: false
         property color ink: win.ui.muted
         property var dropdown: null
@@ -459,16 +462,16 @@ ApplicationWindow {
         onPressed: dropdownWasOpen = !!dropdown && dropdown.wasOpenOnPress()
         onClicked: if (dropdown) dropdown.toggle(dropdownWasOpen)
         readonly property bool lit: hovered || down
-        Layout.preferredWidth: primary ? 40 : 36; Layout.preferredHeight: 36
+        Layout.preferredWidth: labeled ? implicitContentWidth + 24 : primary ? 40 : 36; Layout.preferredHeight: 36
         Layout.leftMargin: primary ? 9 : 0
-        padding: 0
+        padding: 0; leftPadding: labeled ? 12 : 0; rightPadding: labeled ? 12 : 0
         Accessible.name: description
-        ToolTip.visible: hovered; ToolTip.text: description
-        contentItem: Item {
-            AppIcon {
-                anchors.centerIn: parent; width: 18; height: 18; name: toolbarButton.iconName; opacity: toolbarButton.enabled ? 1 : 0.4
-                color: toolbarButton.primary ? win.ui.accentText : toolbarButton.lit ? win.ui.foreground : toolbarButton.ink
-            }
+        ToolTip.visible: hovered; ToolTip.delay: 500; ToolTip.text: description
+        contentItem: Row {
+            spacing: 7; anchors.centerIn: parent; opacity: toolbarButton.enabled ? 1 : 0.4
+            readonly property color tint: toolbarButton.primary ? win.ui.accentText : toolbarButton.lit ? win.ui.foreground : toolbarButton.ink
+            AppIcon { anchors.verticalCenter: parent.verticalCenter; width: 18; height: 18; name: toolbarButton.iconName; color: parent.tint }
+            Label { visible: toolbarButton.labeled; anchors.verticalCenter: parent.verticalCenter; text: toolbarButton.label; font.pixelSize: 13; font.bold: toolbarButton.primary; color: parent.tint }
         }
         background: Rectangle {
             radius: win.softRadius
@@ -687,13 +690,17 @@ ApplicationWindow {
             }
             ComboBox {
                 id: themes; objectName: "themePicker"
-                Layout.preferredWidth: 36; Layout.preferredHeight: 36
+                Layout.preferredWidth: win.toolbarLabels ? themeContent.implicitWidth + 24 : 36; Layout.preferredHeight: 36
                 padding: 0; indicator: null
-                contentItem: Item {
-                    AppIcon { anchors.centerIn: parent; width: 18; height: 18; name: "theme"; color: themes.hovered || themes.popup.visible ? win.ui.foreground : win.ui.muted }
+                contentItem: Row {
+                    id: themeContent
+                    spacing: 7; anchors.centerIn: parent
+                    readonly property color tint: themes.hovered || themes.popup.visible ? win.ui.foreground : win.ui.muted
+                    AppIcon { anchors.verticalCenter: parent.verticalCenter; width: 18; height: 18; name: "theme"; color: parent.tint }
+                    Label { visible: win.toolbarLabels; anchors.verticalCenter: parent.verticalCenter; text: "Theme"; font.pixelSize: 13; color: parent.tint }
                 }
                 Accessible.name: "Theme: " + currentText
-                ToolTip.visible: hovered; ToolTip.text: "Theme: " + currentText
+                ToolTip.visible: hovered; ToolTip.delay: 500; ToolTip.text: "Theme: " + currentText
                 delegate: ItemDelegate {
                     required property string modelData
                     required property int index
@@ -756,10 +763,14 @@ ApplicationWindow {
                         Qt.callLater(function() { fonts.popup.open() })
                     } else deck.chooseFont(visibleFonts[index])
                 }
-                Layout.preferredWidth: 36; Layout.preferredHeight: 36
+                Layout.preferredWidth: win.toolbarLabels ? fontContent.implicitWidth + 24 : 36; Layout.preferredHeight: 36
                 padding: 0; indicator: null
-                contentItem: Item {
-                    AppIcon { anchors.centerIn: parent; width: 18; height: 18; name: "font"; color: fonts.hovered || fonts.popup.visible ? win.ui.foreground : win.ui.muted }
+                contentItem: Row {
+                    id: fontContent
+                    spacing: 7; anchors.centerIn: parent
+                    readonly property color tint: fonts.hovered || fonts.popup.visible ? win.ui.foreground : win.ui.muted
+                    AppIcon { anchors.verticalCenter: parent.verticalCenter; width: 18; height: 18; name: "font"; color: parent.tint }
+                    Label { visible: win.toolbarLabels; anchors.verticalCenter: parent.verticalCenter; text: "Font"; font.pixelSize: 13; color: parent.tint }
                 }
                 Accessible.name: "Font: " + deck.fontName
                 delegate: ItemDelegate {
@@ -783,16 +794,17 @@ ApplicationWindow {
                     }
                     onOpened: contentItem.positionViewAtIndex(fonts.currentIndex, ListView.Contain)
                 }
-                ToolTip.visible: hovered; ToolTip.text: "Font: " + deck.fontName
+                ToolTip.visible: hovered; ToolTip.delay: 500; ToolTip.text: "Font: " + deck.fontName
             }
             ToolbarIconButton {
                 objectName: "modeButton"
                 iconName: win.mode
+                label: win.overview ? "Overview" : win.markdown ? "Markdown" : "Visual"
                 description: (win.overview ? "Overview · Switch to Visual" : win.markdown ? "Markdown · Switch to Overview" : "Visual · Switch to Markdown") + "  ·  Ctrl+M overview, Ctrl+. source"
                 onClicked: win.cycleMode(1)
             }
             ToolbarIconButton {
-                objectName: "fileButton"; iconName: "file"; ink: deck.dirty ? win.ui.accent : win.ui.muted
+                objectName: "fileButton"; iconName: "file"; label: "File"; ink: deck.dirty ? win.ui.accent : win.ui.muted
                 description: deck.dirty ? "File · Unsaved changes" : "File"
                 dropdown: fileMenu
                 AppMenu {
@@ -812,7 +824,7 @@ ApplicationWindow {
                 }
             }
             ToolbarIconButton {
-                objectName: "presentButton"; iconName: "present"; description: "Present (Ctrl+Space)"; primary: true
+                objectName: "presentButton"; iconName: "present"; label: "Present"; description: "Present (Ctrl+Space)"; primary: true
                 onClicked: win.togglePresent()
             }
         }
