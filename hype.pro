@@ -1,4 +1,4 @@
-QT += core gui qml quick quickcontrols2 multimedia concurrent dbus
+QT += core gui qml quick quickcontrols2 multimedia concurrent dbus network
 # macOS has no freedesktop portal; filedialog.cpp falls back to QFileDialog there.
 macx: QT += widgets
 # Like Qt's own modules, Hype never throws or catches. Without unwinding tables and with
@@ -39,3 +39,5 @@ SOURCES += src/recovery.cpp
 HEADERS += src/recovery.h
 SOURCES += src/cli.cpp
 HEADERS += src/cli.h
+SOURCES += src/generator.cpp
+HEADERS += src/generator.h

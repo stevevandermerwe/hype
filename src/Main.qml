@@ -49,7 +49,7 @@ ApplicationWindow {
     property bool syncingEditor: false
     property bool editingSlide: false
     property bool presenting: false
-    readonly property bool popupOpen: pasteDialog.visible || compressionDialog.visible ||
+    readonly property bool popupOpen: generateDialog.visible || pasteDialog.visible || compressionDialog.visible ||
         historyDialog.visible || closeDialog.visible || shortcutsOverlay.visible || themes.popup.visible || fonts.popup.visible ||
         slideMenu.visible || fileMenu.visible || slideBar.menuOpen || sourceBar.menuOpen
     property var compressionReturnFocus: null
@@ -272,6 +272,16 @@ ApplicationWindow {
         standardButtons: Dialog.Discard | Dialog.Cancel
         Label { text: "Changes could not be backed up. Discard them and quit?" }
         onDiscarded: { win.allowClose = true; win.close() }
+    }
+    GenerateDialog {
+        id: generateDialog; ui: win.ui; rounding: win.rounding
+        onGenerated: function(path, warnings) {
+            deck.flushAutosave()
+            if (!deck.openPath(path)) return
+            close()
+            if (warnings.length > 0)
+                deck.setStatus("Generated with " + warnings.length + " warning" + (warnings.length > 1 ? "s" : "") + "; run hype check")
+        }
     }
     Dialog {
         id: historyDialog; objectName: "historyDialog"
@@ -800,6 +810,7 @@ ApplicationWindow {
                     y: parent.height + 4
                     AppMenuItem { text: "New presentation"; hint: "Ctrl+N"; onTriggered: deck.newDeck() }
                     AppMenuItem { text: "Open…"; hint: "Ctrl+O"; onTriggered: deck.openDialog() }
+                    AppMenuItem { text: "Generate with AI…"; onTriggered: generateDialog.open() }
                     AppMenuSeparator {}
                     AppMenuItem { text: deck.dirty ? "Save changes" : "Save"; hint: "Ctrl+S"; onTriggered: deck.save() }
                     AppMenuItem { text: "Save as…"; hint: "Ctrl+Shift+S"; onTriggered: deck.saveAs() }

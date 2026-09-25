@@ -1,6 +1,7 @@
 #include "apptheme.h"
 #include "cli.h"
 #include "deck.h"
+#include "generator.h"
 #include "renderer.h"
 #include "themepreview.h"
 #ifdef Q_OS_MACOS
@@ -164,12 +165,14 @@ int main(int argc, char **argv) {
     QQuickStyle::setStyle("Basic");
     qmlRegisterType<SlideItem>("Hype", 1, 0, "SlideCanvas");
     qmlRegisterType<AppTheme>("Hype", 1, 0, "AppTheme");
+    Generator generator; // Outlives the engine, whose bindings still read it while shutting down.
     QQmlApplicationEngine engine;
     QObject::connect(&engine, &QQmlEngine::warnings, [](const QList<QQmlError> &errors) {
         for (const auto &error : errors)
             fprintf(stderr, "%s\n", qPrintable(error.toString()));
     });
     engine.rootContext()->setContextProperty("deck", &deck);
+    engine.rootContext()->setContextProperty("ai", &generator);
     QPointer<Thumbnails> thumbnails = new Thumbnails(&deck);
     engine.addImageProvider("slides", thumbnails);
     engine.addImageProvider("theme", new ThemePreviews(&deck));
