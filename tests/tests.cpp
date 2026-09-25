@@ -796,10 +796,65 @@ class HypeTests : public QObject {
         QVERIFY(!m.autoplay);
         m = parseMedia("![span fit](photo.jpg)", "/tmp/deck");
         QVERIFY(!m.error.isEmpty());
-        // Side placement is gone; a lone "left" is ordinary alt text again.
+        // A bare "left" or "right" places the image beside the text; alt= keeps such words as alt text.
         m = parseMedia("![left](photo.jpg)\n\n# Text", "/tmp/deck");
         QVERIFY(m.error.isEmpty());
+        QCOMPARE(m.side, QString("left"));
+        QVERIFY(!m.span); // A headline no longer makes the image span.
+        QCOMPARE(m.overlay, 0.0);
+        QCOMPARE(mediaRect(m), QRectF(60, 60, 880, 960));
+        m = parseMedia("![right span](photo.jpg)\n\n# Text", "/tmp/deck");
         QVERIFY(m.span);
+        QCOMPARE(mediaRect(m), QRectF(960, 0, 960, 1080));
+        QVERIFY(!parseMedia("![left right](photo.jpg)", "/tmp/deck").error.isEmpty());
+        QVERIFY(parseMedia("![alt=left](photo.jpg)", "/tmp/deck").side.isEmpty());
+        QVERIFY(parseMedia("![Turn left](photo.jpg)", "/tmp/deck").side.isEmpty());
+    }
+    void splitLayoutKeepsTextBesideTheImage() {
+        QTemporaryDir tmp;
+        QVERIFY(QDir(tmp.path()).mkpath("images"));
+        QImage red(400, 300, QImage::Format_RGB32);
+        red.fill(QColor(255, 0, 0));
+        QVERIFY(red.save(tmp.path() + "/images/red.png"));
+        Deck deck;
+        const QColor background(deck.palette()["background"].toString());
+        auto render = [&](const QString &source) {
+            QImage image(960, 540, QImage::Format_ARGB32_Premultiplied);
+            QPainter painter(&image);
+            paintSlide(&painter, image.rect(), source, tmp.path(), deck.palette());
+            painter.end();
+            return image;
+        };
+        for (const QString side : {"right", "left"}) {
+            const QImage image = render("# Hello there\n\n![" + side + "](red.png)");
+            const int imageX = side == "right" ? 710 : 250, textHalf = side == "right" ? 0 : 480;
+            QCOMPARE(image.pixelColor(imageX, 270), QColor(255, 0, 0)); // The image sits in its half.
+            QCOMPARE(image.pixelColor(side == "right" ? 10 : 950, 10), background); // Not darkened or blurred.
+            bool textDrawn = false;
+            for (int y = 0; y < 540 && !textDrawn; ++y)
+                for (int x = textHalf; x < textHalf + 480; ++x)
+                    if (image.pixelColor(x, y) != background) { textDrawn = true; break; }
+            QVERIFY2(textDrawn, "the headline should be drawn in the half opposite the image");
+        }
+        // Under the text, by contrast, the image spans the slide and is darkened for the text.
+        const int darkened = render("# Hello there\n\n![](red.png)").pixelColor(10, 10).red();
+        QVERIFY(darkened > 150 && darkened < 250);
+    }
+    void mediaSideMenuEditsTheDirective() {
+        Deck d;
+        d.editSlide("# T\n![](photo.png)");
+        d.setMediaSide("right");
+        QVERIFY(d.slideText().endsWith("![right](photo.png)"));
+        d.setMediaSide("left");
+        QVERIFY(d.slideText().endsWith("![left](photo.png)"));
+        d.setMediaBackground("blur");
+        QVERIFY(d.slideText().contains("left") && d.slideText().contains("background=blur"));
+        d.setMediaSide("none");
+        QVERIFY(parseMedia(d.slideText(), {}).side.isEmpty());
+        QVERIFY(d.slideText().contains("background=blur"));
+        d.editSlide("# No media");
+        d.setMediaSide("left");
+        QCOMPARE(d.slideText(), QString("# No media"));
     }
     void codeIsNotMedia() {
         QString source = "```markdown\n![](missing.png)\n<!-- Keep this code -->\n```";

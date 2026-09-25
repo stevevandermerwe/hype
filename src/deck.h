@@ -144,6 +144,7 @@ class Deck : public QAbstractListModel {
     Q_INVOKABLE void matchImageBackground(bool enabled);
     Q_INVOKABLE void setMediaBackground(const QString &mode);
     Q_INVOKABLE void setMediaMode(const QString &mode);
+    Q_INVOKABLE void setMediaSide(const QString &side);
     Q_INVOKABLE void setStatus(const QString &status);
   signals:
     void changed();

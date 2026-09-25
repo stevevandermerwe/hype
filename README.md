@@ -114,8 +114,13 @@ Choose **Fit** or **Span** from the **Layout** menu above the editor, or put lay
 | --- | --- |
 | `![fit](photo.jpg)` | Show the whole image, with text overlaid |
 | `![span](photo.jpg)` | Fill the slide, cropping as needed |
+| `![right](diagram.png)` | Image in the right half, text in the left half |
+| `![left](diagram.png)` | Image in the left half, text in the right half |
+| `![left span](photo.jpg)` | Fill the left half, cropping as needed |
 | `![loop muted](demo.mp4)` | Loop a video without sound |
 | `![autoplay=false](demo.mp4)` | Wait for Space to play the video |
+
+**Beside the text.** When a picture would sit under your text and make it hard to read, put it in one half instead: choose **Beside text, on the left** or **on the right** from the **Layout** menu, or write `![right](diagram.png)`. The text moves to the other half, so nothing is overlaid, darkened, or blurred. Add `span` to fill the image's half edge to edge. Videos work the same way. (To use the word "left" or "right" as alt text, write `alt="left"`.)
 
 For images that leave space around them, Hype matches the background to the image’s edge color when possible. Choose **White**, **Black**, or **Use theme color** from the **Layout** menu to override it, or specify any color: `![fit background=#ffffff](diagram.png)`. Choosing White or Black also switches spanning media to fit so the background is visible.
 

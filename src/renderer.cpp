@@ -25,6 +25,8 @@
 #include <QTimer>
 #include <QWaitCondition>
 
+// Directives that may open a bracket without a value; anything else is alt text.
+static const QStringList bareDirectives{"fit", "span", "left", "right", "loop", "muted"};
 static QRegularExpression mediaRe(R"(!\[([^\]]*)\]\((?:<([^>]+)>|([^\s)]+))\))");
 namespace {
 class ImageCache {
@@ -135,7 +137,7 @@ QString withMediaDirectives(const QString &source, const QStringList &remove,
     const auto first = tokens.match(flags);
     const bool directives =
         first.hasMatch() && first.capturedStart() == 0 &&
-        (QStringList{"fit", "span", "loop", "muted"}.contains(first.captured(1)) ||
+        (bareDirectives.contains(first.captured(1)) ||
          !first.captured(2).isEmpty());
     QStringList kept = add;
     if (directives) {
@@ -170,7 +172,7 @@ static Media readMedia(const QString &source, const QString &base) {
     auto first = tokens.match(flags);
     bool directives =
         first.hasMatch() && first.capturedStart() == 0 &&
-        (QStringList{"fit", "span", "loop", "muted"}.contains(first.captured(1)) ||
+        (bareDirectives.contains(first.captured(1)) ||
          !first.captured(2).isEmpty());
     QString explicitOverlay;
     bool fit = false, span = false;
@@ -191,6 +193,10 @@ static Media readMedia(const QString &source, const QString &base) {
             } else if (key == "fit") {
                 result.span = false;
                 fit = true;
+            } else if (key == "left" || key == "right") {
+                if (!result.side.isEmpty() && result.side != key)
+                    result.error = "Choose either left or right";
+                result.side = key;
             } else if (key == "loop")
                 result.loop = value != "false";
             else if (key == "muted")
@@ -213,10 +219,13 @@ static Media readMedia(const QString &source, const QString &base) {
     }
     if (fit && span)
         result.error = "Choose either span or fit";
+    // Beside the text an image fits its half; span then fills that half.
+    if (!result.side.isEmpty() && !span)
+        result.span = false;
     // A background choice implies fitting unless span was explicitly requested.
     if (!span && (result.background == "blur" || result.background == "auto"))
         result.span = false;
-    result.overlay = (!result.video || result.span) && !result.text.trimmed().isEmpty() ? 0.25 : 0;
+    result.overlay = result.side.isEmpty() && (!result.video || result.span) && !result.text.trimmed().isEmpty() ? 0.25 : 0;
     if (!explicitOverlay.isEmpty()) {
         bool ok;
         double opacity = explicitOverlay.toDouble(&ok);
@@ -549,7 +558,13 @@ static void rememberFit(const QString &key, qreal size) {
     QMutexLocker lock(&fitMutex);
     fittedSizes.insert(key, new qreal(size));
 }
+// A split slide gives one half to the media and the other to the text.
+static QRectF splitHalf(const QString &side) { return QRectF(side == "left" ? 0 : 960, 0, 960, 1080); }
+static QRectF splitTextArea(const QString &side) { return side == "left" ? QRectF(990, 90, 800, 900) : QRectF(130, 90, 800, 900); }
 QRectF mediaRect(const Media &media) {
+    if (!media.side.isEmpty())
+        return media.span ? splitHalf(media.side)
+                          : QRectF(media.side == "left" ? 60 : 980, 60, 880, 960);
     return media.span ? QRectF(0, 0, 1920, 1080)
                       : (!media.video || media.text.trimmed().isEmpty() ? QRectF(70, 50, 1780, 980)
                                                         : QRectF(100, 280, 1720, 730));
@@ -574,6 +589,9 @@ void paintSlide(QPainter *p, const QRectF &target, const QString &source, const 
     QString text = media.text.trimmed();
     auto problems = slideProblems(source, base);
     QRectF area(130, 90, 1660, 900);
+    const bool split = !media.side.isEmpty();
+    // Backgrounds and their contrast rules stay inside the media's half of a split slide.
+    const QRectF backdropArea = split ? splitHalf(media.side) : QRectF(0, 0, 1920, 1080);
     if (!media.file.isEmpty()) {
         QString path =
             media.video ? (media.poster.isEmpty() ? ensurePoster(media.path, base) : media.poster)
@@ -586,11 +604,15 @@ void paintSlide(QPainter *p, const QRectF &target, const QString &source, const 
             (media.background == "blur" || media.background == "auto")
             ? loadedImage(ensurePoster(media.path, base), QSize(320, 180), false) : image;
         if (!overlayOnly && !media.span && media.background == "blur") {
-            if (!backdrop.isNull())
+            if (!backdrop.isNull()) {
+                p->save();
+                p->setClipRect(backdropArea);
                 p->drawImage(QRectF(0, 0, 1920, 1080), blurredBackground(backdrop));
+                p->restore();
+            }
         }
         if ((!media.video || !media.background.isEmpty()) && !media.span && media.background != "theme" &&
-            (bg.isEmpty() || !media.background.isEmpty())) {
+            (bg.isEmpty() || !media.background.isEmpty()) && (!split || !media.background.isEmpty())) {
             QColor color(media.background);
             if ((media.background.isEmpty() || media.background == "auto") && !backdrop.isNull()) {
                 // Quantized edge votes ignore transparent pixels and tolerate compression noise.
@@ -622,8 +644,8 @@ void paintSlide(QPainter *p, const QRectF &target, const QString &source, const 
             }
             if (color.isValid()) {
                 if (!overlayOnly)
-                    p->fillRect(QRectF(0, 0, 1920, 1080), color);
-                if (fg.isEmpty()) {
+                    p->fillRect(backdropArea, color);
+                if (fg.isEmpty() && !split) {
                     QString ink = (color.redF() * 0.2126 + color.greenF() * 0.7152 +
                                    color.blueF() * 0.0722) > .55
                                       ? "#161616"
@@ -643,7 +665,7 @@ void paintSlide(QPainter *p, const QRectF &target, const QString &source, const 
                         scaled);
             p->save();
             p->setClipRect(rect);
-            p->drawImage(dest, !media.video && !text.isEmpty() ? softenedImage(image, dest.size()) : image);
+            p->drawImage(dest, !media.video && !split && !text.isEmpty() ? softenedImage(image, dest.size()) : image);
             p->restore();
         } else if (!overlayOnly && !backgroundOnly) {
             p->setPen(QColor(palette["accent"].toString()));
@@ -652,7 +674,11 @@ void paintSlide(QPainter *p, const QRectF &target, const QString &source, const 
             p->setFont(diagnostic);
             p->drawText(rect, Qt::AlignCenter, "Missing media\n" + media.file);
         }
-        if (!media.video || media.span) {
+        if (split) {
+            // The text has its own half, so the picture is neither darkened nor blurred.
+            if (!text.isEmpty())
+                area = splitTextArea(media.side);
+        } else if (!media.video || media.span) {
             if (!backgroundOnly)
                 p->fillRect(QRectF(0, 0, 1920, 1080), QColor(0, 0, 0, qRound(media.overlay * 255)));
             if (fg.isEmpty() && !text.isEmpty())
@@ -680,7 +706,7 @@ void paintSlide(QPainter *p, const QRectF &target, const QString &source, const 
         bool stack = (text.contains('\n') || text.contains('\r')) && !text.startsWith('#') &&
                      !quote && !list && !code;
         qreal low = 8, high = code ? 56 : quote ? 64 : list ? 72 : table ? 60 : stack ? 128 : 76;
-        if (media.video && !media.span)
+        if (media.video && !media.span && !split)
             high = 48;
         QTextDocument doc;
         // Layout happens in 1080p slide units, so every render size, the PDF and

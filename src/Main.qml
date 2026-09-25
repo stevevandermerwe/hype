@@ -633,6 +633,9 @@ ApplicationWindow {
                     AppMenuItem { text: "Fit"; checkable: true; checked: !deck.media.span; onTriggered: deck.setMediaMode("fit") }
                     AppMenuItem { text: "Span"; checkable: true; checked: deck.media.span; onTriggered: deck.setMediaMode("span") }
                     AppMenuSeparator {}
+                    AppMenuItem { text: "Beside text, on the left"; checkable: true; checked: deck.media.side === "left"; onTriggered: deck.setMediaSide(deck.media.side === "left" ? "none" : "left") }
+                    AppMenuItem { text: "Beside text, on the right"; checkable: true; checked: deck.media.side === "right"; onTriggered: deck.setMediaSide(deck.media.side === "right" ? "none" : "right") }
+                    AppMenuSeparator {}
                     AppMenuItem { text: "Match image edges"; checkable: true; checked: deck.media.background === "auto"; onTriggered: deck.matchImageBackground(true) }
                     AppMenuItem { text: deck.media.video ? "Blurred first frame" : "Blurred image"; checkable: true; checked: deck.media.background === "blur"; onTriggered: deck.setMediaBackground("blur") }
                     AppMenuItem { text: "White"; checkable: true; checked: deck.media.background === "white"; onTriggered: deck.setMediaBackground("white") }

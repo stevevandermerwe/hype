@@ -75,6 +75,9 @@ Each slide takes one image or video. Options go inside the brackets:
 | --- | --- |
 | `![](diagram.png)` | Show the whole image |
 | `![span](photo.jpg)` | Fill the slide, cropping as needed |
+| `![right](diagram.png)` | Image in the right half, text in the left half |
+| `![left](diagram.png)` | Image in the left half, text in the right half |
+| `![left span](photo.jpg)` | Fill the left half, cropping as needed |
 | `![fit](photo.jpg)` | Show the whole image, with any text overlaid |
 | `![fit background=#ffffff](diagram.png)` | Fill the space around it with a color |
 | `![fit background=blur](portrait.jpg)` | Fill it with a blurred copy of the image |
@@ -85,7 +88,9 @@ Each slide takes one image or video. Options go inside the brackets:
 | `![poster=still.png](demo.mp4)` | Show an image from `images/` until it plays |
 
 Text on an image slide is overlaid in white over a slightly darkened picture.
-An image with a headline spans the slide unless you say `fit`.
+An image with a headline spans the slide unless you say `fit`. For text that
+must stay readable beside a picture, say `left` or `right`: the image takes that
+half of the slide and the text moves to the other half, so nothing is overlaid.
 
 ## Commands
 

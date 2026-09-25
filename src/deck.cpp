@@ -561,6 +561,7 @@ QVariantMap Deck::media() const {
                     {"video", m.video},
                     {"animated", animated},
                     {"span", m.span},
+                    {"side", m.side},
                     {"loop", m.loop},
                     {"muted", m.muted},
                     {"autoplay", m.autoplay},
@@ -918,6 +919,14 @@ void Deck::setMediaMode(const QString &mode) {
     if (!QStringList{"fit", "span"}.contains(mode))
         return;
     editSlide(withMediaDirectives(slideSource(), {"fit", "span"}, {mode}));
+}
+// Puts the media beside the text ("left" or "right"), or back under it ("none").
+void Deck::setMediaSide(const QString &side) {
+    if (!QStringList{"left", "right", "none"}.contains(side))
+        return;
+    if (parseMedia(slideSource(), baseDir()).file.isEmpty())
+        return;
+    editSlide(withMediaDirectives(slideSource(), {"left", "right"}, side == "none" ? QStringList() : QStringList{side}));
 }
 void Deck::exportDialog(const QString &format) {
     if (m_exporting)
