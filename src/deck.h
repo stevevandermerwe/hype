@@ -27,6 +27,8 @@ struct ParsedDeck {
 ParsedDeck parseDeck(const QString &source);
 QString scalar(const QString &header, const QString &key, const QString &fallback = {});
 QString setScalar(QString header, const QString &key, const QString &value);
+// The headline, or else the first line of text, or else of code, of a slide's text (no media or comments).
+QString slideTitle(const QString &text);
 
 class Deck : public QAbstractListModel {
     Q_OBJECT
@@ -133,6 +135,10 @@ class Deck : public QAbstractListModel {
     Q_INVOKABLE void saveAs();
     Q_INVOKABLE void newDeck();
     Q_INVOKABLE bool openPath(const QString &path);
+    // One numbered title per slide, for giving an AI the shape of the talk.
+    Q_INVOKABLE QString slideOutline() const;
+    // Where images go: the presentation's folder, or empty until the deck is saved.
+    Q_INVOKABLE QString baseDirectory() const { return m_path.isEmpty() ? QString() : baseDir(); }
     Q_INVOKABLE QVariantList recentPresentations() const;
     Q_INVOKABLE void importDialog();
     Q_INVOKABLE bool importMedia(const QUrl &url, bool newSlide = false);

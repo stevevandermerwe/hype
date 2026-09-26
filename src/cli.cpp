@@ -109,29 +109,6 @@ QString toText(const QString &path, const Problem &problem) {
         .arg(problem.slide ? QString("slide %1 ").arg(problem.slide) : QString())
         .arg(problem.error ? "error" : "warning", problem.message);
 }
-// The headline, or else the first line of text, or else of code. Fences close as in parseDeck.
-QString slideTitle(const QString &text) {
-    static const QRegularExpression fenceRe("^(`{3,}|~{3,})(.*)$");
-    QString first, code, fence;
-    for (const auto &raw : text.split('\n')) {
-        const QString line = raw.trimmed();
-        const auto match = fenceRe.match(line);
-        const QString run = match.captured(1);
-        if (match.hasMatch() && fence.isEmpty())
-            fence = run;
-        else if (match.hasMatch() && run[0] == fence[0] && run.size() >= fence.size() &&
-                 match.captured(2).trimmed().isEmpty())
-            fence.clear();
-        else if (!fence.isEmpty() && code.isEmpty())
-            code = line;
-        else if (fence.isEmpty() && line.startsWith('#'))
-            return line.mid(line.indexOf(' ') + 1).trimmed();
-        else if (fence.isEmpty() && first.isEmpty())
-            first = QString(line).remove(QRegularExpression(R"(^(>|[-*+]|\d+\.)\s+|\\$)")).trimmed();
-    }
-    return first.isEmpty() ? code : first;
-}
-
 struct Command {
     QCommandLineParser parser;
     Command(const QString &name, const QString &description, bool presentation = true) {
@@ -425,6 +402,77 @@ int generate(const QStringList &arguments) {
     return 0;
 }
 
+int revise(const QStringList &arguments) {
+    Command command("revise", "Ask the AI model to change one slide, or to draw a picture for it. Saves the presentation.");
+    command.parser.addPositionalArgument("slide", "Slide number, from 1", "<slide>");
+    command.parser.addPositionalArgument("instruction", "What to change", "<instruction>");
+    command.parser.addOption({"diagram", "Also draw an SVG picture for the slide"});
+    command.parser.addOption({"image", "Add a raster picture from the image model, leaving the text alone"});
+    command.parser.addOption({"endpoint", "Chat completions URL (default: the saved one)", "url"});
+    command.parser.addOption({"model", "Model name at that endpoint", "name"});
+    command.parser.addOption({"image-endpoint", "Image endpoint (default: the chat endpoint)", "url"});
+    command.parser.addOption({"image-model", "Image model name", "name"});
+    command.json();
+    command.parser.process(arguments);
+    Deck deck;
+    if (!command.load(deck))
+        return 1;
+    bool ok = false;
+    const int number = command.argument(2).toInt(&ok);
+    if (!ok || number < 1 || number > deck.count())
+        return fail("Name a slide from 1 to " + QString::number(deck.count()) + ".");
+    const QString instruction = command.argument(3);
+    if (instruction.trimmed().isEmpty())
+        return fail("Say what to change on the slide.");
+    if (command.parser.isSet("diagram") && command.parser.isSet("image"))
+        return fail("Choose either --diagram or --image.");
+    const QString kind = command.parser.isSet("diagram") ? "diagram" : command.parser.isSet("image") ? "image" : "text";
+    AiConfig config = loadAiConfig();
+    if (command.parser.isSet("endpoint")) config.endpoint = command.parser.value("endpoint");
+    if (command.parser.isSet("model")) config.model = command.parser.value("model");
+    if (command.parser.isSet("image-endpoint")) config.imageEndpoint = command.parser.value("image-endpoint");
+    if (command.parser.isSet("image-model")) config.imageModel = command.parser.value("image-model");
+    deck.select(number - 1);
+    Generator generator;
+    generator.setConfig(config);
+    QEventLoop loop;
+    bool done = false;
+    int status = 1;
+    QString summary;
+    QStringList warnings;
+    QObject::connect(&generator, &Generator::slideReady, &loop, [&](const QString &slide, const QStringList &found, const QString &what) {
+        deck.editSlide(slide);
+        summary = what;
+        warnings = found;
+        status = deck.savePath(deck.path()) ? 0 : 1;
+        if (status) print(stderr, deck.status());
+        done = true;
+        loop.quit();
+    });
+    QObject::connect(&generator, &Generator::failed, &loop, [&](const QString &message) {
+        print(stderr, message);
+        done = true;
+        loop.quit();
+    });
+    print(stderr, "Asking " + (kind == "image" ? config.imageModel : config.model) + "…");
+    generator.editSlide(instruction, kind, deck.slideText(), deck.slideOutline(), number - 1, deck.baseDirectory());
+    if (!done)
+        loop.exec();
+    if (status != 0)
+        return 1;
+    if (command.parser.isSet("json")) {
+        QJsonArray list;
+        for (const auto &warning : warnings)
+            list << warning;
+        print({{"presentation", deck.path()}, {"slide", number}, {"summary", summary}, {"warnings", list}});
+    } else {
+        print(stdout, summary + " (slide " + QString::number(number) + ") in " + deck.path());
+        for (const auto &warning : warnings)
+            print(stderr, "warning: " + warning);
+    }
+    return 0;
+}
+
 int themes(const QStringList &arguments) {
     Command command("themes", "List the installed themes.", false);
     command.json();
@@ -499,12 +547,13 @@ QString cliSummary() {
            "  render <presentation>           Render one slide or all of them to PNG\n"
            "  export <presentation> <output>  Export PDF, PowerPoint, or HTML\n"
            "  generate <prompt>               Write a whole presentation folder with an AI model\n"
+           "  revise <presentation> <n> <what>  Change one slide, or draw its picture, with an AI model\n"
            "  themes                          List installed themes\n"
            "  help format                     How to write a presentation\n"
            "  skill [install]                 Print the skill for coding agents, or install it";
 }
 bool isCliCommand(const QString &word) {
-    return QStringList{"new", "check", "slides", "render", "export", "generate", "themes", "skill", "help"}.contains(word);
+    return QStringList{"new", "check", "slides", "render", "export", "generate", "revise", "themes", "skill", "help"}.contains(word);
 }
 int runCli(const QStringList &arguments) {
     const QString command = arguments.value(1);
@@ -514,6 +563,7 @@ int runCli(const QStringList &arguments) {
            : command == "render" ? render(arguments)
            : command == "export" ? exportDeck(arguments)
            : command == "generate" ? generate(arguments)
+           : command == "revise" ? revise(arguments)
            : command == "themes" ? themes(arguments)
            : command == "skill"  ? skill(arguments)
                                  : help(arguments);

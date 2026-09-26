@@ -1,10 +1,12 @@
 #include "apptheme.h"
 #include "deck.h"
 #include "filedialog.h"
+#include "generator.h"
 #include "renderer.h"
 #include "images.h"
 #include "syntax.h"
 #include <QApplication>
+#include <QBuffer>
 #include <QAbstractTextDocumentLayout>
 #include <QClipboard>
 #include <QDBusArgument>
@@ -263,6 +265,85 @@ class HypeTests : public QObject {
         QVERIFY(!deck.openPath(files.path() + "/missing.md"));
         QCOMPARE(opened.size(), 1);
         QCOMPARE(deck.path(), path);
+    }
+    void slideRepliesAreValidatedAndPicturesNeverOverwritten() {
+        QVERIFY(parseSlideReply("# A\n\n- b", false).error.isEmpty());
+        QCOMPARE(parseSlideReply("```md\n# A\n```", false).slide, QString("# A"));
+        QVERIFY(!parseSlideReply("# A\n---\n# B", false).error.isEmpty());
+        QVERIFY(!parseSlideReply("---\ntitle: x\n---\n# A", false).error.isEmpty());
+        QVERIFY(parseSlideReply("# Code\n\n````\n---\n````", false).error.isEmpty()); // Inside a fence.
+        QVERIFY(!parseSlideReply("  \n", false).error.isEmpty());
+        const QString diagram =
+            "=== FILE: slide.md ===\n# A\n\n![right](x.svg)\n=== FILE: images/x.svg ===\n<svg/>\n"
+            "=== FILE: ../evil.svg ===\nno\n=== FILE: images/y.png ===\nno\n";
+        auto reply = parseSlideReply(diagram, true);
+        QVERIFY(reply.error.isEmpty());
+        QCOMPARE(reply.images.keys(), QStringList{"images/x.svg"});
+        QVERIFY(parseSlideReply(diagram, false).images.isEmpty()); // Text mode takes no pictures.
+
+        QTemporaryDir folder;
+        auto written = writeSlidePictures(folder.path(), reply);
+        QVERIFY(written.error.isEmpty());
+        QVERIFY(QFile::exists(folder.path() + "/images/x.svg"));
+        QCOMPARE(written.slide, reply.slide);
+        written = writeSlidePictures(folder.path(), reply);
+        QVERIFY(QFile::exists(folder.path() + "/images/x-2.svg"));
+        QVERIFY(written.slide.contains("(x-2.svg)"));
+        QCOMPARE(QFile(folder.path() + "/images/x.svg").size(), qint64(7)); // The first is untouched.
+
+        const QString request = slideRequest("shorter", "# B", "1. A\n2. B\n3. C", 1);
+        QVERIFY(request.contains("2. B   <- the slide to change"));
+        QVERIFY(request.contains("<slide>\n# B\n</slide>"));
+        QVERIFY(request.endsWith("Request: shorter"));
+    }
+    void pictureRepliesAreDecodedAndChecked() {
+        QImage image(4, 2, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        const QString encoded = QString::fromLatin1(png.toBase64());
+        auto reply = parseImageReply(QJsonDocument(QJsonObject{{"choices", QJsonArray{QJsonObject{{"message",
+            QJsonObject{{"images", QJsonArray{QJsonObject{{"image_url", QJsonObject{{"url", "data:image/png;base64," + encoded}}}}}}}}}}}}).toJson());
+        QVERIFY(reply.error.isEmpty());
+        QCOMPARE(reply.extension, QString("png"));
+        QCOMPARE(QImage::fromData(reply.bytes).size(), QSize(4, 2));
+        reply = parseImageReply(QJsonDocument(QJsonObject{{"data", QJsonArray{QJsonObject{{"b64_json", encoded}}}}}).toJson());
+        QVERIFY(reply.error.isEmpty());
+        QVERIFY(!parseImageReply("{\"error\": {\"message\": \"No credits\"}}").error.isEmpty());
+        QCOMPARE(parseImageReply("{\"error\": {\"message\": \"No credits\"}}").error, QString("No credits"));
+        QVERIFY(parseImageReply("{\"choices\": [{\"message\": {\"content\": \"Sorry\"}}]}").error.contains("no picture"));
+        QVERIFY(parseImageReply("{\"data\": [{\"b64_json\": \"AAAA\"}]}").error.contains("not a picture"));
+        QVERIFY(!parseImageReply("<html>").error.isEmpty());
+
+        const auto chat = QJsonDocument::fromJson(buildImageRequest(QUrl("https://x.test/v1/chat/completions"), "m", "p")).object();
+        QVERIFY(chat.contains("messages") && chat["modalities"].toArray().contains("image"));
+        const auto images = QJsonDocument::fromJson(buildImageRequest(QUrl("https://x.test/v1/images/generations"), "m", "p")).object();
+        QCOMPARE(images["prompt"].toString(), QString("p"));
+        QVERIFY(!images.contains("messages"));
+
+        // A picture goes beside existing text, or alone when there is none, and never over a file.
+        QTemporaryDir folder;
+        auto added = addPictureToSlide(folder.path(), "# Title", reply, "A sunrise");
+        QCOMPARE(added.slide, QString("# Title\n![right](a-sunrise.png)\n"));
+        added = addPictureToSlide(folder.path(), "![](old.png)", reply, "A sunrise");
+        QCOMPARE(added.slide, QString("![](a-sunrise-2.png)"));
+        QVERIFY(QFile::exists(folder.path() + "/images/a-sunrise.png") && QFile::exists(folder.path() + "/images/a-sunrise-2.png"));
+    }
+    void slideOutlineAndPictureFolder() {
+        Deck d;
+        d.editSource("# One\n\n---\n\n![](a.png)\n\n> A quote\n\n---\n\n<!-- note -->\n");
+        QCOMPARE(d.slideOutline(), QString("1. One\n2. A quote\n3. (no text)"));
+        QVERIFY(d.baseDirectory().isEmpty()); // No folder for pictures until the deck is saved.
+        QTemporaryDir folder;
+        QVERIFY(d.savePath(folder.path() + "/talk.md"));
+        QCOMPARE(d.baseDirectory(), folder.path());
+        d.select(1);
+        d.editSlide("# Changed\n\n- x"); // What an accepted AI change does.
+        QCOMPARE(d.slideText(), QString("# Changed\n\n- x"));
+        d.undo();
+        QVERIFY(d.slideText().contains("A quote"));
     }
     void reopensLastPresentation() {
         QSettings settings(QSettings::IniFormat, QSettings::UserScope, "hype", "hype");

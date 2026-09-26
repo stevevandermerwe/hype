@@ -50,10 +50,10 @@ QString unfenced(const QString &text) {
     return body.mid(match.capturedLength(), body.size() - match.capturedLength() - 3).trimmed() + "\n";
 }
 
-bool acceptedPath(const QString &path) {
+bool acceptedPath(const QString &path, const QString &primary) {
     static const QRegularExpression image("^images/[A-Za-z0-9][A-Za-z0-9._-]*\\.svg$",
                                           QRegularExpression::CaseInsensitiveOption);
-    return path == "presentation.md" || image.match(path).hasMatch();
+    return path == primary || image.match(path).hasMatch();
 }
 
 // An API error is either a string or an object with a message.
@@ -75,6 +75,8 @@ AiConfig loadAiConfig() {
     config.keyEnv = store.value("keyEnv", config.keyEnv).toString();
     config.templatePath = store.value("templatePath").toString();
     config.outputRoot = store.value("outputRoot").toString();
+    config.imageEndpoint = store.value("imageEndpoint").toString();
+    config.imageModel = store.value("imageModel", config.imageModel).toString();
     return config;
 }
 
@@ -85,6 +87,8 @@ void saveAiConfig(const AiConfig &config) {
     store.setValue("keyEnv", config.keyEnv);
     store.setValue("templatePath", config.templatePath);
     store.setValue("outputRoot", config.outputRoot);
+    store.setValue("imageEndpoint", config.imageEndpoint);
+    store.setValue("imageModel", config.imageModel);
     store.sync();
 }
 
@@ -185,13 +189,13 @@ ChatReply parseChatReply(const QByteArray &body) {
     return {text, {}};
 }
 
-GeneratedFiles parseGeneratedFiles(const QString &text) {
+GeneratedFiles parseGeneratedFiles(const QString &text, const QString &primary) {
     static const QRegularExpression marker("^=== FILE: (.+?) ===$");
     GeneratedFiles result;
     QString path, body;
     bool inFile = false;
     auto flush = [&] {
-        if (!inFile || !acceptedPath(path) || result.files.size() >= MaxFiles) return;
+        if (!inFile || !acceptedPath(path, primary) || result.files.size() >= MaxFiles) return;
         const QByteArray bytes = unfenced(body).trimmed().toUtf8() + "\n";
         if (bytes.size() <= MaxFileBytes)
             result.files.insert(path, bytes);
@@ -211,10 +215,10 @@ GeneratedFiles parseGeneratedFiles(const QString &text) {
         // No markers: accept a bare Markdown deck rather than throw the reply away.
         const QString bare = unfenced(text).trimmed();
         if (bare.contains("\n---") && bare.contains("# "))
-            result.files.insert("presentation.md", bare.toUtf8() + "\n");
+            result.files.insert(primary, bare.toUtf8() + "\n");
     }
-    if (!result.files.contains("presentation.md"))
-        result.error = "The reply did not contain a presentation.md. Try again, or use a more capable model.";
+    if (!result.files.contains(primary))
+        result.error = "The reply did not contain a " + primary + ". Try again, or use a more capable model.";
     return result;
 }
 
@@ -283,11 +287,181 @@ Written writePresentation(const GeneratedFiles &generated, const QString &direct
     return written;
 }
 
+// ---- Changing one slide -------------------------------------------------------------------
+
+namespace {
+// True when the text holds a slide separator (or front matter) outside a code fence.
+bool hasSlideSeparator(const QString &text) {
+    static const QRegularExpression fenceRe("^ {0,3}(`{3,}|~{3,})");
+    QString fence;
+    for (const QString &raw : text.split('\n')) {
+        const QString line = raw.trimmed();
+        const auto match = fenceRe.match(raw);
+        if (match.hasMatch()) {
+            const QString run = match.captured(1);
+            if (fence.isEmpty()) fence = run;
+            else if (run[0] == fence[0] && run.size() >= fence.size()) fence.clear();
+        } else if (fence.isEmpty() && line == "---")
+            return true;
+    }
+    return false;
+}
+
+QString uniqueName(const QDir &folder, const QString &name) {
+    const QFileInfo info(name);
+    QString candidate = name;
+    for (int n = 2; folder.exists(candidate) && n <= MaxFolderAttempts; ++n)
+        candidate = info.completeBaseName() + "-" + QString::number(n) + "." + info.suffix();
+    return candidate;
+}
+} // namespace
+
+SlideReply parseSlideReply(const QString &text, bool withImages) {
+    SlideReply reply;
+    QString body;
+    if (withImages || text.contains(QRegularExpression("^=== FILE:", QRegularExpression::MultilineOption))) {
+        const GeneratedFiles files = parseGeneratedFiles(text, "slide.md");
+        if (!files.error.isEmpty()) {
+            reply.error = files.error;
+            return reply;
+        }
+        body = QString::fromUtf8(files.files["slide.md"]);
+        if (withImages)
+            for (auto it = files.files.cbegin(); it != files.files.cend(); ++it)
+                if (it.key() != "slide.md")
+                    reply.images.insert(it.key(), it.value());
+    } else
+        body = unfenced(text);
+    body = body.trimmed();
+    if (body.isEmpty())
+        reply.error = "The model returned an empty slide.";
+    else if (hasSlideSeparator(body))
+        reply.error = "The model returned more than one slide. Try again with a narrower request.";
+    else
+        reply.slide = body;
+    return reply;
+}
+
+QString slideRequest(const QString &instruction, const QString &slide, const QString &outline, int index) {
+    QStringList lines = outline.split('\n', Qt::SkipEmptyParts);
+    if (index >= 0 && index < lines.size())
+        lines[index] += "   <- the slide to change";
+    return "Outline of the deck:\n" + lines.join('\n') + "\n\nThe slide to change (slide " + QString::number(index + 1) +
+           "):\n<slide>\n" + slide.trimmed() + "\n</slide>\n\nRequest: " + instruction.trimmed();
+}
+
+QString slideTemplate(const QString &kind, QString *error) {
+    QString text = readResource(kind == "diagram" ? ":/slide-diagram.md" : ":/slide-text.md", error);
+    if (text.isEmpty()) return {};
+    return text.replace("{{format}}", readResource(":/format.md", nullptr).trimmed());
+}
+
+QString imagePrompt(const QString &instruction, const QString &slide) {
+    const QString title = slideTitle(parseMedia(slide, {}).text);
+    return "Create a picture for one presentation slide" + (title.isEmpty() ? QString() : " titled \"" + title + "\"") +
+           ". Wide 16:9 composition with a calm area that can sit beside text. Do not draw words, letters or logos "
+           "unless the request asks for them.\n\nRequest: " + instruction.trimmed();
+}
+
+QByteArray buildImageRequest(const QUrl &endpoint, const QString &model, const QString &prompt) {
+    // OpenAI's images endpoint takes a prompt; chat endpoints (OpenRouter) ask for image output.
+    QJsonObject body{{"model", model}};
+    if (endpoint.path().endsWith("/images/generations")) {
+        body["prompt"] = prompt;
+        body["n"] = 1;
+    } else {
+        body["messages"] = QJsonArray{QJsonObject{{"role", "user"}, {"content", prompt}}};
+        body["modalities"] = QJsonArray{"image", "text"};
+    }
+    return QJsonDocument(body).toJson(QJsonDocument::Compact);
+}
+
+ImageReply parseImageReply(const QByteArray &body) {
+    ImageReply reply;
+    const auto document = QJsonDocument::fromJson(body);
+    if (!document.isObject()) {
+        reply.error = "The endpoint did not return JSON. Check the image endpoint URL.";
+        return reply;
+    }
+    const auto root = document.object();
+    if (root.contains("error")) {
+        const QString message = errorMessage(root["error"]);
+        reply.error = message.isEmpty() ? "The endpoint returned an error." : message;
+        return reply;
+    }
+    QString mime = "image/png";
+    QByteArray encoded;
+    const auto images = root["choices"].toArray().first().toObject()["message"].toObject()["images"].toArray();
+    if (!images.isEmpty()) {
+        const QString url = images.first().toObject()["image_url"].toObject()["url"].toString();
+        static const QRegularExpression dataUrl("^data:(image/[a-z+.-]+);base64,(.+)$", QRegularExpression::DotMatchesEverythingOption);
+        const auto match = dataUrl.match(url);
+        if (match.hasMatch()) {
+            mime = match.captured(1);
+            encoded = match.captured(2).toLatin1();
+        }
+    } else if (const auto data = root["data"].toArray(); !data.isEmpty())
+        encoded = data.first().toObject()["b64_json"].toString().toLatin1();
+    if (encoded.isEmpty()) {
+        reply.error = "The image model returned no picture. Check that the image model can draw pictures.";
+        return reply;
+    }
+    reply.bytes = QByteArray::fromBase64(encoded);
+    if (QImage::fromData(reply.bytes).isNull()) {
+        reply.bytes.clear();
+        reply.error = "The image model returned data that is not a picture.";
+        return reply;
+    }
+    reply.extension = mime == "image/jpeg" ? "jpg" : mime == "image/webp" ? "webp" : "png";
+    return reply;
+}
+
+SlideFiles writeSlidePictures(const QString &baseDir, const SlideReply &reply) {
+    SlideFiles result{reply.slide, {}};
+    const QDir folder(baseDir + "/images");
+    if (!reply.images.isEmpty() && !QDir().mkpath(folder.path())) {
+        result.error = "Could not create " + folder.path();
+        return result;
+    }
+    for (auto it = reply.images.cbegin(); it != reply.images.cend(); ++it) {
+        const QString name = QFileInfo(it.key()).fileName();
+        const QString written = uniqueName(folder, name);
+        QSaveFile file(folder.filePath(written));
+        if (!file.open(QIODevice::WriteOnly) || file.write(it.value()) < 0 || !file.commit()) {
+            result.error = file.fileName() + ": " + file.errorString();
+            return result;
+        }
+        if (written != name)
+            for (const QString &form : {"(%1)", "(<%1>)", "(images/%1)", "(<images/%1>)"})
+                result.slide.replace(form.arg(name), form.arg(written));
+    }
+    return result;
+}
+
+SlideFiles addPictureToSlide(const QString &baseDir, const QString &slide, const ImageReply &image,
+                             const QString &hint) {
+    SlideFiles result{slide, {}};
+    const QDir folder(baseDir + "/images");
+    if (!QDir().mkpath(folder.path())) {
+        result.error = "Could not create " + folder.path();
+        return result;
+    }
+    const QString name = uniqueName(folder, slugify(hint).left(40) + "." + image.extension);
+    QSaveFile file(folder.filePath(name));
+    if (!file.open(QIODevice::WriteOnly) || file.write(image.bytes) < 0 || !file.commit()) {
+        result.error = file.fileName() + ": " + file.errorString();
+        return result;
+    }
+    const bool hasText = !parseMedia(slide, baseDir).text.trimmed().isEmpty();
+    result.slide = withMedia(slide, QString("![%1](%2)").arg(hasText ? "right" : "", name));
+    return result;
+}
+
 Generator::Generator(QObject *parent)
     : QObject(parent), m_config(loadAiConfig()), m_network(new QNetworkAccessManager(this)) {
     m_ticker.setInterval(1000);
     connect(&m_ticker, &QTimer::timeout, this, [this] {
-        setStatus(QString("Generating… %1s (this can take a minute)").arg(m_elapsed.elapsed() / 1000));
+        setStatus(QString("%1… %2s (this can take a minute)").arg(m_waiting).arg(m_elapsed.elapsed() / 1000));
     });
 }
 
@@ -306,6 +480,8 @@ void Generator::setModel(const QString &value) { m_config.model = value.trimmed(
 void Generator::setKeyEnv(const QString &value) { m_config.keyEnv = value.trimmed(); emit configChanged(); }
 void Generator::setTemplatePath(const QString &value) { m_config.templatePath = value.trimmed(); emit configChanged(); }
 void Generator::setOutputRoot(const QString &value) { m_config.outputRoot = value.trimmed(); emit configChanged(); }
+void Generator::setImageEndpoint(const QString &value) { m_config.imageEndpoint = value.trimmed(); emit configChanged(); }
+void Generator::setImageModel(const QString &value) { m_config.imageModel = value.trimmed(); emit configChanged(); }
 void Generator::saveSettings() { saveAiConfig(m_config); }
 
 QString Generator::storeKey(const QString &key) {
@@ -329,18 +505,18 @@ void Generator::cancel() {
     if (m_reply) m_reply->abort();
 }
 
-void Generator::generate(const QString &prompt, const QString &theme, const QString &directory,
-                         const QString &mode) {
-    if (busy()) return;
-    if (prompt.trimmed().isEmpty())
-        return fail(mode == "mindmap" ? "Paste your mind map first." : "Describe the presentation you want.");
-    const QUrl url(m_config.endpoint);
+QString Generator::failureText(const QString &parsedError, const QByteArray &body, int http,
+                               const QString &networkError) const {
+    if (body.isEmpty()) return networkError;
+    return (http >= 400 ? QString("HTTP %1: ").arg(http) : QString()) + parsedError;
+}
+
+void Generator::begin(const QString &endpoint, const QString &model, const QByteArray &body, const Done &done,
+                      const QString &waiting) {
+    const QUrl url(endpoint);
     if (!url.isValid() || (url.scheme() != "https" && url.scheme() != "http") || url.host().isEmpty())
         return fail("The endpoint must be an http(s) URL, such as " + QString(DefaultAiEndpoint));
-    if (m_config.model.isEmpty()) return fail("Choose a model.");
-    QString error;
-    const QString system = promptTemplate(m_config, &error, mode);
-    if (system.isEmpty()) return fail("Could not read the prompt template. " + error);
+    if (model.isEmpty()) return fail("Choose a model.");
     const QString key = aiApiKey(m_config);
     if (key.isEmpty() && !isLocalHost(url))
         return fail("No API key. Set " + (m_config.keyEnv.isEmpty() ? QString("HYPE_AI_KEY") : m_config.keyEnv) +
@@ -350,32 +526,98 @@ void Generator::generate(const QString &prompt, const QString &theme, const QStr
     if (!key.isEmpty()) request.setRawHeader("Authorization", "Bearer " + key.toUtf8());
     request.setRawHeader("X-Title", "Hype");
     request.setTransferTimeout(RequestTimeoutMs);
-    QNetworkReply *reply = m_network->post(request, buildChatRequest(m_config.model, system, prompt.trimmed()));
+    QNetworkReply *reply = m_network->post(request, body);
     m_reply = reply;
+    m_waiting = waiting;
     m_elapsed.start();
     m_ticker.start();
-    setStatus("Generating…");
-    connect(reply, &QNetworkReply::finished, this, [this, reply, theme, directory] { finish(reply, theme, directory); });
+    setStatus(waiting + "…");
+    connect(reply, &QNetworkReply::finished, this, [this, reply, done] {
+        reply->deleteLater();
+        m_reply.clear();
+        m_ticker.stop();
+        emit busyChanged();
+        if (reply->error() == QNetworkReply::OperationCanceledError)
+            return setStatus("Cancelled");
+        done(reply->readAll(), reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(),
+             reply->errorString());
+    });
     emit busyChanged();
 }
 
-void Generator::finish(QNetworkReply *reply, const QString &theme, const QString &directory) {
-    reply->deleteLater();
-    m_reply.clear();
-    m_ticker.stop();
-    emit busyChanged();
-    if (reply->error() == QNetworkReply::OperationCanceledError)
-        return setStatus("Cancelled");
-    const QByteArray body = reply->readAll();
-    const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+void Generator::generate(const QString &prompt, const QString &theme, const QString &directory,
+                         const QString &mode) {
+    if (busy()) return;
+    if (prompt.trimmed().isEmpty())
+        return fail(mode == "mindmap" ? "Paste your mind map first." : "Describe the presentation you want.");
+    QString error;
+    const QString system = promptTemplate(m_config, &error, mode);
+    if (system.isEmpty()) return fail("Could not read the prompt template. " + error);
+    begin(m_config.endpoint, m_config.model, buildChatRequest(m_config.model, system, prompt.trimmed()),
+          [this, theme, directory](const QByteArray &body, int http, const QString &networkError) {
+              finishPresentation(body, http, networkError, theme, directory);
+          });
+}
+
+void Generator::finishPresentation(const QByteArray &body, int http, const QString &networkError,
+                                   const QString &theme, const QString &directory) {
     const ChatReply parsed = parseChatReply(body);
-    if (!parsed.error.isEmpty())
-        return fail(body.isEmpty() ? reply->errorString()
-                                   : (http >= 400 ? QString("HTTP %1: ").arg(http) : QString()) + parsed.error);
+    if (!parsed.error.isEmpty()) return fail(failureText(parsed.error, body, http, networkError));
     const GeneratedFiles files = parseGeneratedFiles(parsed.content);
     if (!files.error.isEmpty()) return fail(files.error);
     const Written written = writePresentation(files, directory, outputRoot(), theme);
     if (!written.error.isEmpty()) return fail(written.error);
     setStatus("Created " + written.presentation);
     emit succeeded(written.presentation, written.warnings);
+}
+
+void Generator::editSlide(const QString &instruction, const QString &kind, const QString &slide,
+                          const QString &outline, int index, const QString &baseDir) {
+    if (busy()) return;
+    if (instruction.trimmed().isEmpty()) return fail("Say what to change on this slide.");
+    if (kind != "text" && kind != "diagram" && kind != "image") return fail("Unknown kind of change: " + kind);
+    if (kind != "text" && baseDir.isEmpty())
+        return fail("Save the presentation first (Ctrl+S), so the picture has a folder to go in.");
+    auto done = [this, kind, slide, baseDir, instruction](const QByteArray &body, int http, const QString &networkError) {
+        if (kind == "image") {
+            const ImageReply image = parseImageReply(body);
+            if (!image.error.isEmpty()) return fail(failureText(image.error, body, http, networkError));
+            const SlideFiles added = addPictureToSlide(baseDir, slide, image, instruction);
+            if (!added.error.isEmpty()) return fail(added.error);
+            setStatus("Added a picture");
+            return emit slideReady(added.slide, slideProblems(added.slide, baseDir), "Added a picture");
+        }
+        finishSlide(body, http, networkError, kind, slide, baseDir);
+    };
+    if (kind == "image") {
+        const QString endpoint = m_config.imageEndpoint.isEmpty() ? m_config.endpoint : m_config.imageEndpoint;
+        return begin(endpoint, m_config.imageModel,
+                     buildImageRequest(QUrl(endpoint), m_config.imageModel, imagePrompt(instruction, slide)), done,
+                     "Drawing");
+    }
+    QString error;
+    const QString system = slideTemplate(kind, &error);
+    if (system.isEmpty()) return fail("Could not read the slide template. " + error);
+    begin(m_config.endpoint, m_config.model,
+          buildChatRequest(m_config.model, system, slideRequest(instruction, slide, outline, index)), done,
+          "Rewriting");
+}
+
+void Generator::finishSlide(const QByteArray &body, int http, const QString &networkError, const QString &kind,
+                            const QString &, const QString &baseDir) {
+    const ChatReply parsed = parseChatReply(body);
+    if (!parsed.error.isEmpty()) return fail(failureText(parsed.error, body, http, networkError));
+    const SlideReply reply = parseSlideReply(parsed.content, kind == "diagram");
+    if (!reply.error.isEmpty()) return fail(reply.error);
+    QString slide = reply.slide;
+    if (!reply.images.isEmpty()) {
+        const SlideFiles written = writeSlidePictures(baseDir, reply);
+        if (!written.error.isEmpty()) return fail(written.error);
+        slide = written.slide;
+    }
+    const QString summary = reply.images.isEmpty() ? "Rewrote the slide"
+                                                   : QString("Rewrote the slide and drew %1 picture%2")
+                                                         .arg(reply.images.size()).arg(reply.images.size() > 1 ? "s" : "");
+    setStatus(summary);
+    emit slideReady(slide, baseDir.isEmpty() ? QStringList() : slideProblems(slide, baseDir), summary);
 }

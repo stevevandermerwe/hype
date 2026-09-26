@@ -221,6 +221,39 @@ QString Deck::slideText() const { return withoutSlidePadding(slideSource()); }
 QString Deck::slide(int i) const {
     return i >= 0 && i < count() ? m_parsed.slides[i].source : QString();
 }
+// The headline, or else the first line of text, or else of code. Fences close as in parseDeck.
+QString slideTitle(const QString &text) {
+    static const QRegularExpression fenceRe("^(`{3,}|~{3,})(.*)$");
+    QString first, code, fence;
+    for (const auto &raw : text.split('\n')) {
+        const QString line = raw.trimmed();
+        const auto match = fenceRe.match(line);
+        const QString run = match.captured(1);
+        if (match.hasMatch() && fence.isEmpty())
+            fence = run;
+        else if (match.hasMatch() && run[0] == fence[0] && run.size() >= fence.size() &&
+                 match.captured(2).trimmed().isEmpty())
+            fence.clear();
+        else if (!fence.isEmpty() && code.isEmpty())
+            code = line;
+        else if (fence.isEmpty() && line.startsWith('#'))
+            return line.mid(line.indexOf(' ') + 1).trimmed();
+        else if (fence.isEmpty() && first.isEmpty())
+            first = QString(line).remove(QRegularExpression(R"(^(>|[-*+]|\d+\.)\s+|\\$)")).trimmed();
+    }
+    return first.isEmpty() ? code : first;
+}
+QString Deck::slideOutline() const {
+    constexpr int MaxTitle = 80;
+    QStringList lines;
+    for (int i = 0; i < count(); ++i) {
+        QString title = slideTitle(parseMedia(slide(i), baseDir()).text);
+        if (title.size() > MaxTitle)
+            title = title.left(MaxTitle) + "…";
+        lines << QString("%1. %2").arg(i + 1).arg(title.isEmpty() ? QString("(no text)") : title);
+    }
+    return lines.join('\n');
+}
 QString Deck::baseDir() const {
     return m_path.isEmpty() ? QDir::currentPath() : QFileInfo(m_path).absolutePath();
 }

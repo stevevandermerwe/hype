@@ -1,11 +1,14 @@
 """Exercise `hype generate` against a fake OpenAI-compatible endpoint: no network, no API key."""
+import base64
 import json
 import os
 from pathlib import Path
+import struct
 import subprocess
 import tempfile
 import threading
 import unittest
+import zlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 APP = Path(os.environ.get('HYPE_BIN') or Path(__file__).resolve().parents[1] / 'build/hype')
@@ -38,6 +41,19 @@ not an svg
 '''
 
 
+def tiny_png():
+    """A valid 2x2 red PNG, built without image libraries."""
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+    row = b'\x00' + b'\xff\x00\x00' * 2
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 2, 2, 8, 2, 0, 0, 0)) +
+            chunk(b'IDAT', zlib.compress(row * 2)) + chunk(b'IEND', b''))
+
+
+DECK = '---\ntitle: "Deck"\n---\n\n# Alpha\n\n---\n\n# Beta\n\n- one\n- two\n\n---\n\n# Gamma\n'
+SLIDE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900"><rect width="1600" height="900" fill="#345"/></svg>'
+
+
 class FakeEndpoint(BaseHTTPRequestHandler):
     reply = {'choices': [{'message': {'content': REPLY}, 'finish_reason': 'stop'}]}
     status = 200
@@ -57,7 +73,7 @@ class FakeEndpoint(BaseHTTPRequestHandler):
         pass
 
 
-class GenerateTests(unittest.TestCase):
+class EndpointCase(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -84,6 +100,8 @@ class GenerateTests(unittest.TestCase):
         self.assertEqual(result.returncode, code, result.stderr)
         return result
 
+
+class GenerateTests(EndpointCase):
     def test_generate_writes_a_folder_with_slides_and_images(self):
         out = self.root / 'talk'
         result = self.hype('generate', 'a talk on small teams', '--endpoint', self.endpoint, '--model', 'test/model',
@@ -168,6 +186,112 @@ class GenerateTests(unittest.TestCase):
         text = self.hype('generate', '--print-template').stdout
         self.assertIn('=== FILE: presentation.md ===', text)
         self.assertIn('Writing a Hype presentation', text)
+
+
+class ReviseTests(EndpointCase):
+    """hype revise: one slide changed by the model, everything else left exactly as it was."""
+
+    def setUp(self):
+        super().setUp()
+        self.deck = self.root / 'deck/presentation.md'
+        self.deck.parent.mkdir()
+        self.deck.write_text(DECK)
+
+    def reply(self, content):
+        FakeEndpoint.reply = {'choices': [{'message': {'content': content}, 'finish_reason': 'stop'}]}
+
+    def revise(self, *arguments, code=0):
+        return self.hype('revise', self.deck, 2, 'make it punchier', '--endpoint', self.endpoint, *arguments,
+                         code=code, HYPE_AI_KEY='k')
+
+    def test_text_rewrites_only_the_chosen_slide_and_sends_the_outline(self):
+        self.reply('```markdown\n# Punchy\n\n- Fast\n- Simple\n```')
+        result = json.loads(self.revise('--json').stdout)
+        self.assertEqual(result['slide'], 2)
+        self.assertEqual(self.deck.read_text(), DECK.replace('# Beta\n\n- one\n- two', '# Punchy\n\n- Fast\n- Simple'))
+        system, user = FakeEndpoint.requests[0]['body']['messages']
+        self.assertIn('one slide', system['content'])
+        self.assertIn('1. Alpha', user['content'])
+        self.assertIn('2. Beta   <- the slide to change', user['content'])
+        self.assertIn('3. Gamma', user['content'])
+        self.assertIn('- one\n- two', user['content'])
+        self.assertTrue(user['content'].endswith('Request: make it punchier'))
+        self.assertTrue(list((self.deck.parent / '.hype-backups').glob('presentation.md.*')))  # The old version is kept.
+
+    def test_a_reply_with_several_slides_is_refused(self):
+        self.reply('# One\n\n---\n\n# Two')
+        self.assertIn('more than one slide', self.revise(code=1).stderr)
+        self.reply('```\n---\n# Two\n```')  # A whole reply that is one fence is still a single slide.
+        self.assertEqual(self.deck.read_text(), DECK)
+
+    def test_a_code_fence_may_contain_a_separator(self):
+        self.reply('# Code\n\n````\n---\n````')
+        self.revise()
+        self.assertIn('````\n---\n````', self.deck.read_text())
+        self.assertEqual(json.loads(self.hype('check', self.deck, '--json').stdout)['slides'], 3)
+
+    def test_diagram_writes_an_svg_and_never_overwrites_one(self):
+        self.reply(f'=== FILE: slide.md ===\n# Flow\n\n![right](flow.svg)\n=== FILE: images/flow.svg ===\n{SLIDE_SVG}\n')
+        result = json.loads(self.revise('--diagram', '--json').stdout)
+        self.assertEqual(result['warnings'], [])
+        self.assertIn('![right](flow.svg)', self.deck.read_text())
+        self.assertEqual((self.deck.parent / 'images/flow.svg').read_text().strip(), SLIDE_SVG)
+        self.assertEqual(json.loads(self.hype('check', self.deck, '--json').stdout)['problems'], [])
+        self.assertIn('slide.md', FakeEndpoint.requests[0]['body']['messages'][0]['content'])
+        self.reply(f'=== FILE: slide.md ===\n# Flow\n\n![right](flow.svg)\n=== FILE: images/flow.svg ===\n{SLIDE_SVG}\n')
+        self.revise('--diagram')  # A second picture with the same name goes beside the first.
+        self.assertTrue((self.deck.parent / 'images/flow-2.svg').exists())
+        self.assertIn('![right](flow-2.svg)', self.deck.read_text())
+        self.assertIn('fill="#345"', (self.deck.parent / 'images/flow.svg').read_text())
+
+    def test_image_adds_a_picture_beside_the_text(self):
+        data = 'data:image/png;base64,' + base64.b64encode(tiny_png()).decode()
+        FakeEndpoint.reply = {'choices': [{'message': {'content': '', 'images': [{'image_url': {'url': data}}]}}]}
+        self.hype('revise', self.deck, 2, 'A calm sunrise', '--image', '--endpoint', self.endpoint,
+                  '--image-model', 'img/model', HYPE_AI_KEY='k')
+        request = FakeEndpoint.requests[0]['body']
+        self.assertEqual(request['model'], 'img/model')
+        self.assertEqual(request['modalities'], ['image', 'text'])
+        self.assertIn('Beta', request['messages'][0]['content'])
+        self.assertIn('A calm sunrise', request['messages'][0]['content'])
+        self.assertTrue((self.deck.parent / 'images/a-calm-sunrise.png').read_bytes().startswith(b'\x89PNG'))
+        text = self.deck.read_text()
+        self.assertIn('# Beta\n\n- one\n- two\n![right](a-calm-sunrise.png)', text)  # The text is untouched.
+        self.assertEqual(json.loads(self.hype('check', self.deck, '--json').stdout)['problems'], [])
+
+    def test_image_endpoint_may_be_the_images_api(self):
+        FakeEndpoint.reply = {'data': [{'b64_json': base64.b64encode(tiny_png()).decode()}]}
+        self.hype('revise', self.deck, 1, 'A logo', '--image', '--endpoint', self.endpoint, '--image-endpoint',
+                  self.endpoint.replace('/chat/completions', '/images/generations'), HYPE_AI_KEY='k')
+        request = FakeEndpoint.requests[0]
+        self.assertTrue(request['path'].endswith('/images/generations'))
+        self.assertIn('A logo', request['body']['prompt'])
+        self.assertNotIn('messages', request['body'])
+        self.assertIn('# Alpha\n![right](a-logo.png)', self.deck.read_text())  # A headline counts as text, so the picture goes beside it.
+
+    def test_image_errors(self):
+        FakeEndpoint.reply = {'choices': [{'message': {'content': 'I cannot draw.'}}]}
+        self.assertIn('no picture', self.hype('revise', self.deck, 2, 'x', '--image', '--endpoint', self.endpoint,
+                                               code=1, HYPE_AI_KEY='k').stderr)
+        FakeEndpoint.reply = {'choices': [{'message': {'images': [{'image_url': {'url': 'data:image/png;base64,AAAA'}}]}}]}
+        self.assertIn('not a picture', self.hype('revise', self.deck, 2, 'x', '--image', '--endpoint', self.endpoint,
+                                                  code=1, HYPE_AI_KEY='k').stderr)
+        self.assertEqual(self.deck.read_text(), DECK)
+        self.assertFalse((self.deck.parent / 'images').exists() and any((self.deck.parent / 'images').iterdir()))
+
+    def test_argument_errors_leave_the_deck_alone(self):
+        self.assertIn('1 to 3', self.hype('revise', self.deck, 9, 'x', '--endpoint', self.endpoint, code=1).stderr)
+        self.assertIn('either', self.revise('--diagram', '--image', code=1).stderr)
+        self.assertIn('Say what', self.hype('revise', self.deck, 2, ' ', '--endpoint', self.endpoint, code=1).stderr)
+        self.assertEqual(FakeEndpoint.requests, [])
+        FakeEndpoint.status = 500
+        FakeEndpoint.reply = {'error': {'message': 'Model overloaded'}}
+        self.assertIn('HTTP 500: Model overloaded', self.revise(code=1).stderr)
+        self.assertEqual(self.deck.read_text(), DECK)
+
+    def test_help_lists_revise(self):
+        self.assertIn('revise', self.hype('help').stdout)
+        self.assertIn('--diagram', self.hype('help', 'revise').stdout)
 
 
 if __name__ == '__main__':

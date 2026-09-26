@@ -46,7 +46,7 @@ on failure, and write errors to stderr. `hype help <command>` lists options and
 - `src/renderer.cpp` — renders slides to `QImage` at slide size (export renders at
   4K, 3840×2160). `src/syntax.cpp` shells out to `source-highlight` for code fences.
 - `src/cli.cpp` — headless commands (`new`, `check`, `slides`, `render`, `export`,
-  `generate`, `themes`, `skill`, `open`, `help`) with no display needed.
+  `generate`, `revise`, `themes`, `skill`, `open`, `help`) with no display needed.
 - `src/pptx.cpp`, `src/html.cpp`, `src/exporter.cpp`, `src/animationexport.cpp` —
   export backends. PPTX renders slides as 4K bitmap images (not editable shapes),
   converts animated WebP/GIF and non-H.264 videos to MP4 via ffmpeg.
@@ -67,7 +67,7 @@ on failure, and write errors to stderr. `hype help <command>` lists options and
   catch `QFileOpenEvent` (Finder double-click) and `isatty(STDIN)` to tell a
   double-clicked app from a CLI run.
 - `src/*.qml`, `resources.qrc` — the editor UI (`Main.qml`, `StartPage.qml`,
-  `GenerateDialog.qml`, `Markdown.js`, `AppIcon.qml`). Deck methods are `Q_INVOKABLE`
+  `GenerateDialog.qml`, `SlideAssistDialog.qml`, `Markdown.js`, `AppIcon.qml`). Deck methods are `Q_INVOKABLE`
   for QML. A plain launch (no file, no unsaved draft) shows `StartPage.qml`, driven by
   the `showStartPage` context property set in `main.cpp`; tests load `Main.qml`
   without it, so it must stay optional (`typeof showStartPage`).

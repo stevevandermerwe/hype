@@ -52,7 +52,7 @@ ApplicationWindow {
     property bool presenting: false
     // Shown on a plain launch, and from the file menu; see showStartPage in main.cpp.
     property bool startPage: typeof showStartPage !== "undefined" && showStartPage
-    readonly property bool popupOpen: startPage || generateDialog.visible || pasteDialog.visible || compressionDialog.visible ||
+    readonly property bool popupOpen: startPage || generateDialog.visible || slideAssist.visible || pasteDialog.visible || compressionDialog.visible ||
         historyDialog.visible || closeDialog.visible || shortcutsOverlay.visible || themes.popup.visible || fonts.popup.visible ||
         slideMenu.visible || fileMenu.visible || slideBar.menuOpen || sourceBar.menuOpen
     property var compressionReturnFocus: null
@@ -294,6 +294,14 @@ ApplicationWindow {
         // Finder and `hype open` can hand over a file after the window is up.
         function onChanged() { if (win.startPage && deck.path !== "") win.startPage = false }
     }
+    SlideAssistDialog {
+        id: slideAssist
+        ui: win.ui; rounding: win.rounding
+        onApplied: function(summary, warnings) {
+            const note = warnings.length > 0 ? "; " + warnings.length + " warning" + (warnings.length > 1 ? "s" : "") + ", see the slide" : ""
+            deck.setStatus(summary + " · Ctrl+Z undoes it" + note)
+        }
+    }
     GenerateDialog {
         id: generateDialog; ui: win.ui; rounding: win.rounding
         onGenerated: function(path, warnings) {
@@ -450,6 +458,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+U"; enabled: win.canFormat; onActivated: win.formatSlide("underline") }
     Shortcut { sequence: "Ctrl+H"; enabled: win.canFormat; onActivated: win.formatSlide("headline") }
     Shortcut { sequence: "Ctrl+K"; enabled: win.canFormat; onActivated: win.formatSlide("code") }
+    Shortcut { sequence: "Ctrl+J"; enabled: win.canFormat; onActivated: slideAssist.open() }
     Shortcut { sequence: "Ctrl+/"; enabled: win.canFormat; onActivated: win.formatSlide("comment") }
     Shortcut { sequences: ["Return", "Enter"]; enabled: !win.popupOpen && !deck.compressingImage && win.overview && !win.presenting; onActivated: win.focusMarkdown() }
     Shortcut { enabled: !win.popupOpen && !deck.compressingImage; sequence: "Ctrl+N"; onActivated: deck.newDeck() }
@@ -641,6 +650,7 @@ ApplicationWindow {
             EditorButton { compact: editorBar.compact; objectName: editorBar.scope + "codeButton"; iconName: "code"; label: "Code"; description: "Code block (Ctrl+K)"; onClicked: win.formatSlide("code") }
             EditorButton { compact: editorBar.compact; objectName: editorBar.scope + "commentButton"; iconName: "comment"; label: "Note"; description: "Comment, hidden on slide (Ctrl+/)"; onClicked: win.formatSlide("comment") }
             Item { Layout.fillWidth: true }
+            EditorButton { compact: editorBar.compact; objectName: editorBar.scope + "aiButton"; iconName: "sparkle"; label: "AI"; description: "Ask AI to change this slide (Ctrl+J)"; onClicked: slideAssist.open() }
             EditorButton { compact: editorBar.compact; iconName: "media-add"; label: "Media"; description: "Add image / video"; onClicked: deck.importDialog() }
             EditorButton {
                 compact: editorBar.compact
@@ -888,6 +898,7 @@ ApplicationWindow {
             { title: "Editing", keys: [
                 ["Ctrl+B", "Bold"], ["Ctrl+I", "Italic"], ["Ctrl+U", "Underline"], ["Ctrl+H", "Headline"], ["Ctrl+K", "Code block"],
                 ["Ctrl+/", "Comment, hidden on slide"],
+                ["Ctrl+J", "Ask AI to change the slide"],
                 ["Ctrl+Z", "Undo"], ["Ctrl+Shift+Z", "Redo"], ["Ctrl+V", "Paste text, or add and name media"] ] }
         ]
         contentItem: ColumnLayout {
