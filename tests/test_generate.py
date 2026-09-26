@@ -152,6 +152,18 @@ class GenerateTests(unittest.TestCase):
         self.assertTrue(body['messages'][0]['content'].startswith('Custom instructions.'))
         self.assertIn('Custom instructions.', self.hype('generate', '--print-template').stdout)
 
+    def test_mind_map_flag_adds_the_outline_rules(self):
+        outline = 'Talk\n  Why\n    Speed\n  How\n'
+        self.hype('generate', outline, '--mind-map', '--endpoint', self.endpoint, '-o', self.root / 'm', HYPE_AI_KEY='k')
+        system, user = FakeEndpoint.requests[0]['body']['messages']
+        self.assertIn('The brief is a mind map', system['content'])
+        self.assertIn('OPML', system['content'])
+        self.assertEqual(user['content'], outline.strip())
+        self.hype('generate', 'a talk', '--endpoint', self.endpoint, '-o', self.root / 'p', HYPE_AI_KEY='k')
+        self.assertNotIn('The brief is a mind map', FakeEndpoint.requests[1]['body']['messages'][0]['content'])
+        self.assertIn('The brief is a mind map', self.hype('generate', '--print-template', '--mind-map').stdout)
+        self.assertIn('Paste your mind map', self.hype('generate', ' ', '--mind-map', '--endpoint', self.endpoint, code=1).stderr)
+
     def test_print_template_shows_the_bundled_prompt(self):
         text = self.hype('generate', '--print-template').stdout
         self.assertIn('=== FILE: presentation.md ===', text)

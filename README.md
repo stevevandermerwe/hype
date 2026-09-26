@@ -16,7 +16,14 @@ Then open **Hype** from the app launcher, or run `hype` in a terminal.
 
 ## Make a presentation
 
-Open Hype from your app launcher. It reopens your last presentation; use **Ctrl+N** to start a new one, or **Ctrl+O** to choose a Markdown file.
+Open Hype from your app launcher and choose how to start:
+
+- **Open** picks a Markdown file; the last few presentations are listed beneath for one-click access.
+- **Wing it** starts a blank slide, so you can just write.
+- **Plan it** asks an AI to draft a whole presentation from a description (see [Generate a presentation with AI](#generate-a-presentation-with-ai)).
+- **Mind map** does the same from a mind map you paste: an indented outline, a Markdown list, or OPML exported from a tool such as XMind.
+
+Press **O**, **W**, **P**, or **M** to choose from the keyboard, or **Esc** to go back to editing. Opening a file (`hype open talk.md`, or double-clicking it) skips the start page; choose **Start page** in the file menu to return to it. Use **Ctrl+N** to start a new presentation or **Ctrl+O** to choose a Markdown file at any time.
 
 In **Visual** mode, select a slide in the sidebar and write its Markdown below the preview. Changes appear as you type. Drag the divider to give the preview or editor more room. The mode button shows the current mode as a grid, slide, or `#` icon; click it to step through **Overview**, **Visual**, and **Markdown**. **Ctrl+M** flips the overview on and off, returning to the mode you came from, and **Ctrl+.** flips the Markdown source. Markdown mode edits the whole presentation, with the same formatting bar on top.
 
@@ -161,6 +168,8 @@ PowerPoint export automatically converts other video formats, including WebM, to
 ## Generate a presentation with AI
 
 Choose **Generate with AI…** from the file menu, or run `hype generate "a 10-slide talk on why small teams ship faster"`. Hype sends your prompt, together with a template that teaches the model Hype's format, to any OpenAI-compatible chat endpoint (OpenRouter by default). The reply becomes a new folder holding `presentation.md` and SVG illustrations in `images/`; the editor opens it, and `hype check` finds any image the model forgot to write.
+
+**Mind maps.** The start page's **Mind map** option opens the same dialog with room to paste an outline: indented text, a Markdown list, or OPML exported from a tool such as XMind. Each branch becomes slides, in your order and your words. From a terminal: `hype generate --mind-map - < map.opml`.
 
 New folders go in `~/Documents/Hype/<title>/` unless you pass `-o folder` (it must be new or empty). Pass `--theme` to pick a theme.
 

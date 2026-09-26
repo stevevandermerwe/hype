@@ -593,10 +593,46 @@ QString Deck::dialogDirectory() const {
     const QString documents = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
     return !documents.isEmpty() && QDir(documents).exists() ? documents : QDir::homePath();
 }
+constexpr int MaxRecentPresentations = 8;
 static void rememberPresentation(const QString &path) {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "hype", "hype");
     settings.setValue("files/lastDirectory", QFileInfo(path).absolutePath());
     settings.setValue("files/lastPresentation", path);
+    QStringList recent = settings.value("files/recent").toStringList();
+    recent.removeAll(path);
+    recent.prepend(path);
+    while (recent.size() > MaxRecentPresentations)
+        recent.removeLast();
+    settings.setValue("files/recent", recent);
+}
+// Files that still exist, newest first, named for the folder when the file is the usual presentation.md.
+QVariantList Deck::recentPresentations() const {
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "hype", "hype");
+    QStringList paths = settings.value("files/recent").toStringList();
+    const QString last = settings.value("files/lastPresentation").toString();
+    if (!last.isEmpty() && !paths.contains(last))
+        paths.append(last);
+    QVariantList result;
+    for (const QString &path : paths) {
+        const QFileInfo file(path);
+        if (!file.isFile())
+            continue;
+        const QString folder = file.absoluteDir().dirName();
+        const bool generic = file.completeBaseName().toLower() == "presentation" && !folder.isEmpty();
+        QString where = file.absolutePath();
+        if (where.startsWith(QDir::homePath()))
+            where = "~" + where.mid(QDir::homePath().size());
+        result.append(QVariantMap{{"path", file.absoluteFilePath()},
+                                  {"name", generic ? folder : file.completeBaseName()},
+                                  {"folder", where}});
+    }
+    return result;
+}
+bool Deck::openPath(const QString &path) {
+    if (!confirmDiscard() || !loadPath(path))
+        return false;
+    emit opened(true);
+    return true;
 }
 bool Deck::reopenLastPresentation() {
     QSettings settings(QSettings::IniFormat, QSettings::UserScope, "hype", "hype");

@@ -185,8 +185,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s\n", qPrintable(deck.status()));
         return 1;
     }
-    if (positional.isEmpty() && !exportWorker)
-        deck.reopenLastPresentation();
     if (args.isSet("theme"))
         deck.chooseTheme(args.value("theme"));
     if (args.isSet("save"))
@@ -224,6 +222,10 @@ int main(int argc, char **argv) {
     });
     engine.rootContext()->setContextProperty("deck", &deck);
     engine.rootContext()->setContextProperty("ai", &generator);
+    // A plain launch opens the start page; a file, a mode flag, or an unsaved draft skips it.
+    engine.rootContext()->setContextProperty(
+        "showStartPage", positional.isEmpty() && !exportWorker && deck.path().isEmpty() && !deck.dirty() &&
+                             !args.isSet("markdown") && !args.isSet("overview"));
     QPointer<Thumbnails> thumbnails = new Thumbnails(&deck);
     engine.addImageProvider("slides", thumbnails);
     engine.addImageProvider("theme", new ThemePreviews(&deck));

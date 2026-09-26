@@ -10,6 +10,14 @@ Popup {
     signal generated(string path, var warnings)
     property string error: ""
     property bool showSettings: false
+    // "plan": describe a talk. "mindmap": paste an outline to turn into slides.
+    property string mode: "plan"
+    readonly property bool mindMap: mode === "mindmap"
+    function openAs(newMode) {
+        if (mode !== newMode) promptField.clear()
+        mode = newMode
+        open()
+    }
     parent: Overlay.overlay
     popupType: Popup.Item
     modal: true; focus: true; padding: 24
@@ -22,7 +30,7 @@ Popup {
     function start() {
         error = ""
         ai.saveSettings()
-        ai.generate(promptField.text, themeBox.currentText)
+        ai.generate(promptField.text, themeBox.currentText, "", mode)
     }
     onOpened: { error = ""; promptField.forceActiveFocus() }
     Connections {
@@ -54,17 +62,20 @@ Popup {
 
     contentItem: ColumnLayout {
         spacing: 14
-        Label { text: "Generate with AI"; color: dialog.ui.foreground; font.pixelSize: 20; font.bold: true }
-        Caption { text: "Describe the presentation. Hype writes a new folder with the slides and their images, then opens it." }
+        Label { text: dialog.mindMap ? "Mind map" : "Generate with AI"; color: dialog.ui.foreground; font.pixelSize: 20; font.bold: true }
+        Caption {
+            text: dialog.mindMap ? "Paste your mind map: an indented outline, a Markdown list, or OPML exported from a mind-map tool. Each branch becomes slides, in your order and your words."
+                                 : "Describe the presentation. Hype writes a new folder with the slides and their images, then opens it."
+        }
         ScrollView {
-            Layout.fillWidth: true; Layout.preferredHeight: 120
+            Layout.fillWidth: true; Layout.preferredHeight: dialog.mindMap ? 240 : 120
             enabled: !ai.busy
             TextArea {
                 id: promptField; objectName: "generatePrompt"
-                Accessible.name: "Presentation prompt"
+                Accessible.name: dialog.mindMap ? "Mind map" : "Presentation prompt"
                 wrapMode: TextEdit.Wrap; font.pixelSize: 14; color: dialog.ui.foreground
                 selectionColor: dialog.ui.selection; selectedTextColor: dialog.ui.selectionText
-                placeholderText: "A 10-slide talk on why small teams ship faster, for engineering managers…"
+                placeholderText: dialog.mindMap ? "Paste your mind map here…" : "A 10-slide talk on why small teams ship faster, for engineering managers…"
                 placeholderTextColor: dialog.ui.muted
                 background: Rectangle { color: dialog.ui.background; radius: Math.min(4, dialog.rounding); border.color: promptField.activeFocus ? dialog.ui.accent : dialog.ui.border }
                 Keys.onPressed: function(event) {

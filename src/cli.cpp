@@ -354,6 +354,7 @@ int generate(const QStringList &arguments) {
     command.parser.addOption({"endpoint", "Chat completions URL (default: OpenRouter)", "url"});
     command.parser.addOption({"model", "Model name at that endpoint", "name"});
     command.parser.addOption({"template", "Prompt template file replacing the bundled one", "file"});
+    command.parser.addOption({"mind-map", "Treat the prompt as a pasted mind map (indented outline, Markdown list, or OPML)"});
     command.parser.addOption({"print-template", "Print the prompt template that would be sent, and exit"});
     command.parser.addOption({"save", "Remember --endpoint, --model and --template for next time"});
     command.json();
@@ -368,7 +369,7 @@ int generate(const QStringList &arguments) {
     }
     if (command.parser.isSet("print-template")) {
         QString error;
-        const QString text = promptTemplate(config, &error);
+        const QString text = promptTemplate(config, &error, command.parser.isSet("mind-map") ? "mindmap" : QString());
         if (text.isEmpty()) return fail(error);
         fputs(qPrintable(text), stdout);
         return 0;
@@ -380,7 +381,11 @@ int generate(const QStringList &arguments) {
         prompt = QString::fromUtf8(input.readAll());
     }
     if (prompt.trimmed().isEmpty())
-        return command.parser.isSet("save") ? 0 : fail("Describe the presentation, or use - to read the prompt from stdin.");
+        {
+        if (command.parser.isSet("save")) return 0;
+        return fail(command.parser.isSet("mind-map") ? "Paste your mind map, or use - to read it from stdin."
+                                                     : "Describe the presentation, or use - to read the prompt from stdin.");
+    }
     Generator generator;
     generator.setConfig(config);
     QEventLoop loop;
@@ -401,7 +406,8 @@ int generate(const QStringList &arguments) {
         loop.quit();
     });
     print(stderr, "Generating with " + config.model + "…");
-    generator.generate(prompt, command.parser.value("theme"), command.parser.value("output"));
+    generator.generate(prompt, command.parser.value("theme"), command.parser.value("output"),
+                       command.parser.isSet("mind-map") ? "mindmap" : QString());
     if (!done)
         loop.exec();
     if (status != 0)
@@ -485,7 +491,7 @@ int help(const QStringList &arguments) {
 
 QString cliSummary() {
     return "Editor:\n"
-           "  open [presentation]             Open the editor, on the last presentation by default\n\n"
+           "  open [presentation]             Open the editor, on a start page by default\n\n"
            "Commands that need no display (hype help <command> for options):\n"
            "  new <presentation>              Start a presentation\n"
            "  check <presentation>            Report every problem, with slide and line\n"

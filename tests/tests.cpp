@@ -214,6 +214,56 @@ class HypeTests : public QObject {
         QVERIFY(next.dialogDirectory() != saved);
         QVERIFY(QDir(next.dialogDirectory()).exists());
     }
+    void recentPresentationsForTheStartPage() {
+        QSettings settings(QSettings::IniFormat, QSettings::UserScope, "hype", "hype");
+        settings.remove("files/recent");
+        settings.remove("files/lastPresentation");
+        Deck deck;
+        QVERIFY(deck.recentPresentations().isEmpty());
+
+        QTemporaryDir files;
+        QVERIFY(QDir(files.path()).mkpath("rails"));
+        const QString generic = files.path() + "/rails/presentation.md", named = files.path() + "/pitch.md";
+        write(generic, "# One\n");
+        write(named, "# Two\n");
+        QVERIFY(deck.loadPath(generic));
+        QVERIFY(deck.loadPath(named));
+        QVERIFY(deck.loadPath(generic)); // Opening again moves it to the top rather than repeating it.
+        auto recent = deck.recentPresentations();
+        QCOMPARE(recent.size(), 2);
+        QCOMPARE(recent[0].toMap()["path"].toString(), generic);
+        QCOMPARE(recent[0].toMap()["name"].toString(), QString("rails")); // presentation.md is named for its folder.
+        QCOMPARE(recent[1].toMap()["name"].toString(), QString("pitch"));
+        QVERIFY(QFile::remove(named));
+        QCOMPARE(deck.recentPresentations().size(), 1); // Missing files drop out.
+
+        // Only the latest few are kept.
+        for (int i = 0; i < 12; ++i) {
+            const QString path = files.path() + QString("/deck%1.md").arg(i);
+            write(path, "# Deck\n");
+            QVERIFY(deck.loadPath(path));
+        }
+        recent = deck.recentPresentations();
+        QCOMPARE(recent.size(), 8);
+        QCOMPARE(recent[0].toMap()["name"].toString(), QString("deck11"));
+        // The presentations a command opens are not remembered, as before.
+        write(files.path() + "/quiet.md", "# Quiet\n");
+        QVERIFY(deck.loadPath(files.path() + "/quiet.md", false));
+        QCOMPARE(deck.recentPresentations()[0].toMap()["name"].toString(), QString("deck11"));
+    }
+    void openPathOpensAndAnnouncesThePresentation() {
+        QTemporaryDir files;
+        const QString path = files.path() + "/talk.md";
+        write(path, "# Hello\n");
+        Deck deck;
+        QSignalSpy opened(&deck, &Deck::opened);
+        QVERIFY(deck.openPath(path));
+        QCOMPARE(deck.path(), path);
+        QCOMPARE(opened.size(), 1);
+        QVERIFY(!deck.openPath(files.path() + "/missing.md"));
+        QCOMPARE(opened.size(), 1);
+        QCOMPARE(deck.path(), path);
+    }
     void reopensLastPresentation() {
         QSettings settings(QSettings::IniFormat, QSettings::UserScope, "hype", "hype");
         settings.remove("files/lastPresentation");

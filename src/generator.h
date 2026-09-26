@@ -34,7 +34,8 @@ bool saveKeychainKey(const QString &key, QString *error);
 bool keychainAvailable();
 
 // The system prompt: the template with {{format}} replaced by Hype's format guide.
-QString promptTemplate(const AiConfig &config, QString *error);
+// mode "mindmap" adds the rules for turning a pasted mind map into slides.
+QString promptTemplate(const AiConfig &config, QString *error, const QString &mode = {});
 QByteArray buildChatRequest(const QString &model, const QString &system, const QString &prompt);
 struct ChatReply {
     QString content, error;
@@ -92,7 +93,8 @@ class Generator : public QObject {
 
     Q_INVOKABLE void saveSettings();
     Q_INVOKABLE QString storeKey(const QString &key); // Returns an error, or empty.
-    Q_INVOKABLE void generate(const QString &prompt, const QString &theme = {}, const QString &directory = {});
+    Q_INVOKABLE void generate(const QString &prompt, const QString &theme = {}, const QString &directory = {},
+                              const QString &mode = {});
     Q_INVOKABLE void cancel();
   signals:
     void busyChanged();

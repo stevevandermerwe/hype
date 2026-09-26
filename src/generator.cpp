@@ -145,10 +145,13 @@ bool saveKeychainKey(const QString &key, QString *error) {
 #endif
 }
 
-QString promptTemplate(const AiConfig &config, QString *error) {
+QString promptTemplate(const AiConfig &config, QString *error, const QString &mode) {
     QString text = readResource(config.templatePath.isEmpty() ? QString(":/prompt.md") : config.templatePath, error);
     if (text.isEmpty()) return {};
-    return text.replace("{{format}}", readResource(":/format.md", nullptr).trimmed());
+    text.replace("{{format}}", readResource(":/format.md", nullptr).trimmed());
+    if (mode == "mindmap")
+        text += "\n" + readResource(":/mindmap.md", nullptr).trimmed() + "\n";
+    return text;
 }
 
 QByteArray buildChatRequest(const QString &model, const QString &system, const QString &prompt) {
@@ -326,15 +329,17 @@ void Generator::cancel() {
     if (m_reply) m_reply->abort();
 }
 
-void Generator::generate(const QString &prompt, const QString &theme, const QString &directory) {
+void Generator::generate(const QString &prompt, const QString &theme, const QString &directory,
+                         const QString &mode) {
     if (busy()) return;
-    if (prompt.trimmed().isEmpty()) return fail("Describe the presentation you want.");
+    if (prompt.trimmed().isEmpty())
+        return fail(mode == "mindmap" ? "Paste your mind map first." : "Describe the presentation you want.");
     const QUrl url(m_config.endpoint);
     if (!url.isValid() || (url.scheme() != "https" && url.scheme() != "http") || url.host().isEmpty())
         return fail("The endpoint must be an http(s) URL, such as " + QString(DefaultAiEndpoint));
     if (m_config.model.isEmpty()) return fail("Choose a model.");
     QString error;
-    const QString system = promptTemplate(m_config, &error);
+    const QString system = promptTemplate(m_config, &error, mode);
     if (system.isEmpty()) return fail("Could not read the prompt template. " + error);
     const QString key = aiApiKey(m_config);
     if (key.isEmpty() && !isLocalHost(url))

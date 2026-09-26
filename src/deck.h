@@ -132,7 +132,8 @@ class Deck : public QAbstractListModel {
     Q_INVOKABLE void save();
     Q_INVOKABLE void saveAs();
     Q_INVOKABLE void newDeck();
-    Q_INVOKABLE bool openPath(const QString &path) { return loadPath(path, true); }
+    Q_INVOKABLE bool openPath(const QString &path);
+    Q_INVOKABLE QVariantList recentPresentations() const;
     Q_INVOKABLE void importDialog();
     Q_INVOKABLE bool importMedia(const QUrl &url, bool newSlide = false);
     Q_INVOKABLE bool pasteMedia();

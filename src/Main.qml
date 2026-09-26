@@ -50,7 +50,9 @@ ApplicationWindow {
     property bool syncingEditor: false
     property bool editingSlide: false
     property bool presenting: false
-    readonly property bool popupOpen: generateDialog.visible || pasteDialog.visible || compressionDialog.visible ||
+    // Shown on a plain launch, and from the file menu; see showStartPage in main.cpp.
+    property bool startPage: typeof showStartPage !== "undefined" && showStartPage
+    readonly property bool popupOpen: startPage || generateDialog.visible || pasteDialog.visible || compressionDialog.visible ||
         historyDialog.visible || closeDialog.visible || shortcutsOverlay.visible || themes.popup.visible || fonts.popup.visible ||
         slideMenu.visible || fileMenu.visible || slideBar.menuOpen || sourceBar.menuOpen
     property var compressionReturnFocus: null
@@ -273,6 +275,24 @@ ApplicationWindow {
         standardButtons: Dialog.Discard | Dialog.Cancel
         Label { text: "Changes could not be backed up. Discard them and quit?" }
         onDiscarded: { win.allowClose = true; win.close() }
+    }
+    StartPage {
+        id: startPageView
+        parent: Overlay.overlay; anchors.fill: parent; z: -1
+        ui: win.ui; rounding: win.rounding
+        visible: win.startPage
+        onOpenRequested: deck.openDialog()
+        onWingRequested: deck.newDeck()
+        onPlanRequested: generateDialog.openAs("plan")
+        onMindMapRequested: generateDialog.openAs("mindmap")
+        onRecentChosen: function(path) { deck.openPath(path) }
+        onDismissed: win.startPage = false
+    }
+    Connections {
+        target: deck
+        function onOpened() { win.startPage = false }
+        // Finder and `hype open` can hand over a file after the window is up.
+        function onChanged() { if (win.startPage && deck.path !== "") win.startPage = false }
     }
     GenerateDialog {
         id: generateDialog; ui: win.ui; rounding: win.rounding
@@ -825,7 +845,8 @@ ApplicationWindow {
                     y: parent.height + 4
                     AppMenuItem { text: "New presentation"; hint: "Ctrl+N"; onTriggered: deck.newDeck() }
                     AppMenuItem { text: "Open…"; hint: "Ctrl+O"; onTriggered: deck.openDialog() }
-                    AppMenuItem { text: "Generate with AI…"; onTriggered: generateDialog.open() }
+                    AppMenuItem { text: "Generate with AI…"; onTriggered: generateDialog.openAs("plan") }
+                    AppMenuItem { text: "Start page"; onTriggered: win.startPage = true }
                     AppMenuSeparator {}
                     AppMenuItem { text: deck.dirty ? "Save changes" : "Save"; hint: "Ctrl+S"; onTriggered: deck.save() }
                     AppMenuItem { text: "Save as…"; hint: "Ctrl+Shift+S"; onTriggered: deck.saveAs() }

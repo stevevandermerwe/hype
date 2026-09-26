@@ -66,8 +66,11 @@ on failure, and write errors to stderr. `hype help <command>` lists options and
   font via the settings portal, and QML. macOS uses a `QApplication` subclass to
   catch `QFileOpenEvent` (Finder double-click) and `isatty(STDIN)` to tell a
   double-clicked app from a CLI run.
-- `src/*.qml`, `resources.qrc` — the editor UI (`Main.qml`, `GenerateDialog.qml`,
-  `Markdown.js`, `AppIcon.qml`). Deck methods are `Q_INVOKABLE` for QML.
+- `src/*.qml`, `resources.qrc` — the editor UI (`Main.qml`, `StartPage.qml`,
+  `GenerateDialog.qml`, `Markdown.js`, `AppIcon.qml`). Deck methods are `Q_INVOKABLE`
+  for QML. A plain launch (no file, no unsaved draft) shows `StartPage.qml`, driven by
+  the `showStartPage` context property set in `main.cpp`; tests load `Main.qml`
+  without it, so it must stay optional (`typeof showStartPage`).
 - `tools/` — development-only fixtures (`import_trial.py`, `refine_trials.py`,
   `trial_io.py`, `requirements-trials.txt`) for converting real Keynote/PPTX decks
   into Markdown trials. Not a general-purpose importer. Trial output lives under
