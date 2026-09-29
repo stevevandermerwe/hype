@@ -79,8 +79,11 @@ func inlineFormatted(_ line: String, font: Font, color: Color) -> AttributedStri
 
 /// One slide's text, laid out for `area` (1920×1080 units) and drawn with
 /// `context`. Returns the fitted body font size, mainly for tests.
+/// `textScale` (the deck's `text_scale`) above 1 raises the largest size text
+/// may be fitted to; below 1 it shrinks the fitted size, so it always shows.
 @discardableResult
-func drawSlideText(_ context: inout GraphicsContext, text: String, area: CGRect, foreground: Color) -> CGFloat {
+func drawSlideText(_ context: inout GraphicsContext, text: String, area: CGRect, foreground: Color,
+                   textScale: CGFloat = 1) -> CGFloat {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return 0 }
     let kind = classify(trimmed)
@@ -147,7 +150,7 @@ func drawSlideText(_ context: inout GraphicsContext, text: String, area: CGRect,
     }
     func blockWidth(_ measured: [(text: Text, size: CGSize)]) -> CGFloat { measured.map(\.size.width).max() ?? 0 }
 
-    let (low, high): (CGFloat, CGFloat) = {
+    let (low, baseHigh): (CGFloat, CGFloat) = {
         switch kind {
         case .code: return (8, 56)
         case .quote: return (8, 64)
@@ -156,6 +159,7 @@ func drawSlideText(_ context: inout GraphicsContext, text: String, area: CGRect,
         case .plain: return (8, bodyLines.count > 1 || headline != nil ? 128 : 76)
         }
     }()
+    let high = baseHigh * max(1, textScale)
     func fits(_ size: CGFloat) -> Bool {
         let measured = measuredLines(bodySize: size)
         return blockHeight(measured) <= area.height && blockWidth(measured) <= area.width + 1
@@ -171,6 +175,7 @@ func drawSlideText(_ context: inout GraphicsContext, text: String, area: CGRect,
         }
         chosen = lowBound
     }
+    chosen = max(low, chosen * min(1, textScale))
     let final = measuredLines(bodySize: chosen)
     var y = area.minY + max(0, (area.height - blockHeight(final)) / 2)
     for (text, size) in final {
@@ -192,7 +197,8 @@ func aspectScaled(_ imageSize: CGSize, into bounds: CGSize, expanding: Bool) -> 
 
 /// Draws one slide (its Markdown source) into `context` in 1920×1080 units —
 /// the Mac app's counterpart to the Qt renderer's `paintSlide`.
-func drawSlide(_ context: inout GraphicsContext, source: String, baseDir: String, palette: Palette) {
+func drawSlide(_ context: inout GraphicsContext, source: String, baseDir: String, palette: Palette,
+               textScale: CGFloat = 1) {
     let full = CGRect(x: 0, y: 0, width: 1920, height: 1080)
     context.fill(Path(full), with: .color(Color(hex: palette.background)))
     let media = parseMedia(source, base: baseDir)
@@ -235,7 +241,7 @@ func drawSlide(_ context: inout GraphicsContext, source: String, baseDir: String
         }
     }
     if !trimmedText.isEmpty {
-        drawSlideText(&context, text: trimmedText, area: textArea, foreground: foreground)
+        drawSlideText(&context, text: trimmedText, area: textArea, foreground: foreground, textScale: textScale)
     }
     if !media.error.isEmpty {
         let banner = CGRect(x: 0, y: 1000, width: 1920, height: 80)

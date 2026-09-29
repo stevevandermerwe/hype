@@ -43,7 +43,7 @@ struct GenerateSheet: View {
 
             HStack {
                 Picker("Theme", selection: $theme) {
-                    ForEach(BundledTheme.allCases) { Text($0.rawValue).tag($0.rawValue) }
+                    ForEach(BundledTheme.allCases) { Text($0.displayName).tag($0.rawValue) }
                 }
                 .fixedSize()
                 Spacer()

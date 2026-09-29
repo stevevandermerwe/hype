@@ -143,10 +143,26 @@ public final class DeckModel: ObservableObject {
         rebuild(slides: slides, selected: to)
     }
 
+    public func chooseTheme(_ name: String) { setHeaderValue("theme", name) }
+
+    /// How much bigger or smaller than fitted size every slide's text renders,
+    /// from the `text_scale` front-matter key (1 when absent or unreadable).
+    public var textScale: Double {
+        guard let value = Double(scalar(parsed.header, "text_scale")) else { return 1 }
+        return TextScale.clamped(value)
+    }
+
+    /// Records a new text scale in the front matter, as one undoable edit.
+    public func setTextScale(_ value: Double) {
+        let rounded = TextScale.clamped((value * 100).rounded() / 100)
+        guard rounded != textScale || scalar(parsed.header, "text_scale").isEmpty else { return }
+        setHeaderValue("text_scale", String(format: "%g", rounded))
+    }
+
     /// Splices a new header (with `key` set to `value`) back into the full
     /// source, replacing only the original header's bytes.
-    public func chooseTheme(_ name: String) {
-        let newHeader = setScalar(parsed.header, "theme", name)
+    private func setHeaderValue(_ key: String, _ value: String) {
+        let newHeader = setScalar(parsed.header, key, value)
         var utf16 = Array(source.utf16)
         utf16.replaceSubrange(0..<parsed.header.utf16.count, with: Array(newHeader.utf16))
         apply(String(utf16CodeUnits: utf16, count: utf16.count))

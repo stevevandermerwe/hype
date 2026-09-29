@@ -17,7 +17,7 @@ struct PresenterView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            SlidePreviewView(slideSource: deck.slideSource(at: deck.selected), baseDir: deck.baseDir, palette: deck.palette)
+            SlidePreviewView(slideSource: deck.slideSource(at: deck.selected), baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale)
                 .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .background(Color(hex: deck.palette.background))

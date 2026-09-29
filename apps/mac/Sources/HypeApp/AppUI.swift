@@ -17,9 +17,17 @@ enum AITask: Hashable {
 /// Cross-cutting UI state the File menu (`HypeMacApp`) and the main window
 /// (`ContentView`) both need to read and write — separate from `DeckModel`,
 /// which owns the document, not view routing.
+/// The main window's two layouts: one slide with its Markdown, or every
+/// slide on a light table for arranging the deck.
+enum EditorMode: String, Hashable {
+    case slide
+    case lightTable
+}
+
 @MainActor
 final class AppUI: ObservableObject {
     @Published var showStartPage = true
+    @Published var editorMode: EditorMode = .slide
     @Published var aiTask: AITask?
     /// Bumped on every `openAI` call, so asking again for the same task still
     /// brings an already-open (possibly buried) AI window back to the front.

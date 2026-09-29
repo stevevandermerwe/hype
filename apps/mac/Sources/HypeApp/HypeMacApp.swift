@@ -63,6 +63,23 @@ struct HypeMacApp: App {
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(!deck.canRedo)
             }
+            CommandGroup(before: .toolbar) {
+                Button("Slide") { ui.editorMode = .slide }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("Light Table") { ui.editorMode = .lightTable }
+                    .keyboardShortcut("2", modifiers: .command)
+                Divider()
+            }
+            CommandMenu("Format") {
+                Button("Bigger Text") { deck.setTextScale(TextScale.bigger(deck.textScale)) }
+                    .keyboardShortcut("+", modifiers: .command)
+                    .disabled(deck.textScale >= TextScale.maximum)
+                Button("Smaller Text") { deck.setTextScale(TextScale.smaller(deck.textScale)) }
+                    .keyboardShortcut("-", modifiers: .command)
+                    .disabled(deck.textScale <= TextScale.minimum)
+                Button("Default Text Size") { deck.setTextScale(1) }
+                    .keyboardShortcut("0", modifiers: .command)
+            }
             CommandMenu("Slide") {
                 Button("New Slide") { deck.addSlide() }
                     .keyboardShortcut(.return, modifiers: .command)
@@ -71,6 +88,13 @@ struct HypeMacApp: App {
                 Button("Delete") { deck.deleteSlide() }
                     .keyboardShortcut(.delete, modifiers: .command)
                     .disabled(deck.count <= 1)
+                Divider()
+                Button("Move Earlier") { deck.moveSlide(from: deck.selected, to: deck.selected - 1) }
+                    .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                    .disabled(deck.selected == 0)
+                Button("Move Later") { deck.moveSlide(from: deck.selected, to: deck.selected + 1) }
+                    .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                    .disabled(deck.selected >= deck.count - 1)
             }
         }
 

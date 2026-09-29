@@ -92,4 +92,12 @@ different choice clearly better, and note the difference in a comment.
   the other half (no darkening/blur there); anything else in the brackets that
   doesn't parse as a directive is alt text.
 - Themes: `theme:` in front matter names a bundled palette; `color_*` front
-  matter keys override individual colors and take precedence.
+  matter keys override individual colors and take precedence. The Mac app
+  bundles 13 (`hype themes` lists them): Omarchy's tokyo-night, nord, and
+  gruvbox, plus catppuccin, rose-pine, everforest, kanagawa, dracula,
+  midnight, and the light catppuccin-latte, rose-pine-dawn, solarized-light,
+  and paper, from each theme's upstream palette.
+- `text_scale:` (Mac-only extension, 0.5–2, default 1) scales every slide's
+  text: above 1 it raises the size fitted text may grow to, below 1 it
+  shrinks the fitted size. The Qt app ignores the key, so such a deck renders
+  at its normal fitted size there.

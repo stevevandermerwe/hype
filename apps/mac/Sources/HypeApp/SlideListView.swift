@@ -43,7 +43,7 @@ private struct SlideThumbnail: View {
                 .frame(width: 18, alignment: .trailing)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 5) {
-                SlidePreviewView(slideSource: source, baseDir: deck.baseDir, palette: deck.palette)
+                SlidePreviewView(slideSource: source, baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
