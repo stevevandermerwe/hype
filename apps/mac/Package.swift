@@ -28,5 +28,8 @@ let package = Package(
         // matching the rest of this port's "no build system beyond SwiftPM" spirit.
         .executableTarget(name: "HypeCLI", dependencies: ["HypeCore", "HypeRender"]),
         .testTarget(name: "HypeCoreTests", dependencies: ["HypeCore"]),
+        // Runs the real text fitter inside a SwiftUI Canvas, so fit/wrap behavior is
+        // measured with real fonts rather than assumed.
+        .testTarget(name: "HypeRenderTests", dependencies: ["HypeRender", "HypeCore"]),
     ]
 )

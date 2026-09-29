@@ -97,6 +97,12 @@ different choice clearly better, and note the difference in a comment.
   gruvbox, plus catppuccin, rose-pine, everforest, kanagawa, dracula,
   midnight, and the light catppuccin-latte, rose-pine-dawn, solarized-light,
   and paper, from each theme's upstream palette.
+- Text fitting (`SlideRendering.swift`, tested in `HypeRenderTests`): text is
+  sized as large as it can be with every line kept whole. The headline is
+  sized on its own (shrinking to stay on one line) so it doesn't drag the body
+  down. Lines wrap only when keeping them whole would leave body text below
+  36 units of a 1080-tall slide, or wrapping makes it at least 1.3× bigger
+  while it's under 52. Known gap: wrapped bullet lines don't hang-indent.
 - `text_scale:` (Mac-only extension, 0.5–2, default 1) scales every slide's
   text: above 1 it raises the size fitted text may grow to, below 1 it
   shrinks the fitted size. The Qt app ignores the key, so such a deck renders

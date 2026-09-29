@@ -77,15 +77,37 @@ func inlineFormatted(_ line: String, font: Font, color: Color) -> AttributedStri
     return result
 }
 
+/// What the text fitter decided for one slide, mainly for tests and warnings.
+struct TextFit: Equatable {
+    var bodySize: CGFloat
+    var headlineSize: CGFloat
+    /// How many lines had to wrap onto a second line; 0 when every line fits whole.
+    var wrappedLines: Int
+    /// Height of the drawn text block, in slide units.
+    var height: CGFloat
+}
+
+/// Body text below this many units (of a 1080-tall slide) is too small to read
+/// from a room, so the fitter will always wrap lines rather than go below it.
+let readableBodySize: CGFloat = 36
+/// Below this, text is legible but small: the fitter still prefers keeping lines
+/// whole, unless wrapping them makes the text at least `wrapGain` times bigger.
+let comfortableBodySize: CGFloat = 52
+let wrapGain: CGFloat = 1.3
+
 /// One slide's text, laid out for `area` (1920×1080 units) and drawn with
-/// `context`. Returns the fitted body font size, mainly for tests.
+/// `context`. The text is sized as large as it can be while every line stays
+/// whole and the block fits the area; long lines wrap only when keeping them
+/// whole would leave the text unreadably (or needlessly) small. The headline is sized
+/// on its own, so a long title shrinks to stay on one line instead of wrapping
+/// or dragging the body text down with it.
 /// `textScale` (the deck's `text_scale`) above 1 raises the largest size text
 /// may be fitted to; below 1 it shrinks the fitted size, so it always shows.
 @discardableResult
 func drawSlideText(_ context: inout GraphicsContext, text: String, area: CGRect, foreground: Color,
-                   textScale: CGFloat = 1) -> CGFloat {
+                   textScale: CGFloat = 1) -> TextFit {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return 0 }
+    guard !trimmed.isEmpty else { return TextFit(bodySize: 0, headlineSize: 0, wrappedLines: 0, height: 0) }
     let kind = classify(trimmed)
     let centered = kind == .plain
     let rawLines = trimmed.components(separatedBy: "\n")
@@ -129,26 +151,43 @@ func drawSlideText(_ context: inout GraphicsContext, text: String, area: CGRect,
     // `GraphicsContext.resolve(_ text: Text)` — and laying lines out by hand
     // here gives real left/center alignment directly, without that detour.
     let lineSpacing: CGFloat = 6
-    func displayLines(bodySize: CGFloat) -> [Text] {
-        var result: [Text] = []
-        if let headline {
-            result.append(Text(inlineFormatted(headline, font: baseFont(bodySize * 1.7), color: foreground)).bold())
-        }
+    let headlineRatio: CGFloat = 1.7
+    let minHeadlineRatio: CGFloat = 1.15
+
+    func headlineText(_ size: CGFloat) -> Text? {
+        headline.map { Text(inlineFormatted($0, font: baseFont(size), color: foreground)).bold() }
+    }
+    /// The largest headline size that still fits `area` on one line. Text width
+    /// grows linearly with font size, so measuring once at a reference size is
+    /// enough; a small margin absorbs rounding.
+    let headlineFitSize: CGFloat = {
+        let unbounded = CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
+        guard let reference = headlineText(100) else { return CGFloat.infinity }
+        let width = context.resolve(reference).measure(in: unbounded).width
+        return width > 0 ? 100 * area.width / width * 0.98 : CGFloat.infinity
+    }()
+    func headlineSize(forBody body: CGFloat) -> CGFloat {
+        headline == nil ? 0 : max(body * minHeadlineRatio, min(body * headlineRatio, headlineFitSize))
+    }
+
+    struct Line { var text: Text; var size: CGSize; var wrapped: Bool }
+    func layout(bodySize: CGFloat, wrapping: Bool) -> [Line] {
+        var texts: [Text] = []
+        if let title = headlineText(headlineSize(forBody: bodySize)) { texts.append(title) }
         for line in bodyLines {
-            result.append(Text(inlineFormatted(line, font: baseFont(bodySize), color: foreground)))
+            texts.append(Text(inlineFormatted(line, font: baseFont(bodySize), color: foreground)))
         }
-        return result
-    }
-    func measuredLines(bodySize: CGFloat) -> [(text: Text, size: CGSize)] {
-        displayLines(bodySize: bodySize).map { line in
-            (line, context.resolve(line).measure(in: CGSize(width: area.width, height: .infinity)))
+        return texts.map { text in
+            let resolved = context.resolve(text)
+            let whole = resolved.measure(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity))
+            guard wrapping, whole.width > area.width else { return Line(text: text, size: whole, wrapped: false) }
+            return Line(text: text, size: resolved.measure(in: CGSize(width: area.width, height: CGFloat.infinity)), wrapped: true)
         }
     }
-    func blockHeight(_ measured: [(text: Text, size: CGSize)]) -> CGFloat {
-        guard !measured.isEmpty else { return 0 }
-        return measured.reduce(0) { $0 + $1.size.height } + CGFloat(measured.count - 1) * lineSpacing
+    func blockHeight(_ lines: [Line]) -> CGFloat {
+        guard !lines.isEmpty else { return 0 }
+        return lines.reduce(0) { $0 + $1.size.height } + CGFloat(lines.count - 1) * lineSpacing
     }
-    func blockWidth(_ measured: [(text: Text, size: CGSize)]) -> CGFloat { measured.map(\.size.width).max() ?? 0 }
 
     let (low, baseHigh): (CGFloat, CGFloat) = {
         switch kind {
@@ -160,30 +199,44 @@ func drawSlideText(_ context: inout GraphicsContext, text: String, area: CGRect,
         }
     }()
     let high = baseHigh * max(1, textScale)
-    func fits(_ size: CGFloat) -> Bool {
-        let measured = measuredLines(bodySize: size)
-        return blockHeight(measured) <= area.height && blockWidth(measured) <= area.width + 1
-    }
-    var chosen = low
-    if fits(high) {
-        chosen = high
-    } else {
+
+    /// The largest body size in `low...high` whose layout fits; with `wrapping`
+    /// off that means every line whole (no line wider than the area).
+    func largestFit(wrapping: Bool) -> CGFloat {
+        func fits(_ size: CGFloat) -> Bool {
+            let lines = layout(bodySize: size, wrapping: wrapping)
+            return blockHeight(lines) <= area.height && lines.allSatisfy { $0.size.width <= area.width + 1 }
+        }
+        if fits(high) { return high }
         var lowBound = low, highBound = high
         for _ in 0..<9 {
             let mid = (lowBound + highBound) / 2
             if fits(mid) { lowBound = mid } else { highBound = mid }
         }
-        chosen = lowBound
+        return lowBound
+    }
+
+    var wrapping = false
+    var chosen = largestFit(wrapping: false)
+    if chosen < comfortableBodySize {
+        let wrapped = largestFit(wrapping: true)
+        if wrapped > chosen, chosen < readableBodySize || wrapped >= chosen * wrapGain {
+            chosen = wrapped
+            wrapping = true
+        }
     }
     chosen = max(low, chosen * min(1, textScale))
-    let final = measuredLines(bodySize: chosen)
-    var y = area.minY + max(0, (area.height - blockHeight(final)) / 2)
-    for (text, size) in final {
-        let x = centered ? area.minX + max(0, (area.width - size.width) / 2) : area.minX
-        context.draw(context.resolve(text), in: CGRect(x: x, y: y, width: size.width, height: size.height))
-        y += size.height + lineSpacing
+
+    let final = layout(bodySize: chosen, wrapping: wrapping)
+    let height = blockHeight(final)
+    var y = area.minY + max(0, (area.height - height) / 2)
+    for line in final {
+        let x = centered ? area.minX + max(0, (area.width - line.size.width) / 2) : area.minX
+        context.draw(context.resolve(line.text), in: CGRect(x: x, y: y, width: line.size.width, height: line.size.height))
+        y += line.size.height + lineSpacing
     }
-    return chosen
+    return TextFit(bodySize: chosen, headlineSize: headlineSize(forBody: chosen),
+                   wrappedLines: final.filter(\.wrapped).count, height: height)
 }
 
 /// Fit- or span-scaled size of `imageSize` within `bounds`, matching Qt's
