@@ -23,6 +23,15 @@ public func promptTemplate(mode: String? = nil) -> String? {
     return text
 }
 
+/// The whole-deck rewrite system prompt, with `{{format}}` expanded.
+public func deckRewriteTemplate() -> String? {
+    guard let text = PromptTemplates.text("deck-rewrite"), let format = PromptTemplates.text("format") else { return nil }
+    return text.replacingOccurrences(of: "{{format}}", with: format.trimmingCharacters(in: .whitespacesAndNewlines))
+}
+
+/// The speaker-notes system prompt.
+public func speakerNotesTemplate() -> String? { PromptTemplates.text("speaker-notes") }
+
 /// The per-slide edit system prompt: `"text"` rewrites the slide; `"diagram"`
 /// also draws an SVG. Matches `slideTemplate` (`generator.cpp`).
 public func slideTemplate(kind: String) -> String? {

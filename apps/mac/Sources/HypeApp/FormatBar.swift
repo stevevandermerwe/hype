@@ -10,6 +10,9 @@ import HypeCore
 struct FormatBar: View {
     @ObservedObject var deck: DeckModel
     @ObservedObject var controller: EditorController
+    @EnvironmentObject var generator: Generator
+    @EnvironmentObject var ui: AppUI
+    @State private var showsPicturePopover = false
     /// The slide's current Markdown, for showing which layout options are on.
     let slideText: String
 
@@ -41,9 +44,18 @@ struct FormatBar: View {
                 IconButton(label: "Insert a picture or video…", icon: "photo.badge.plus", shortcut: "⇧⌘M") {
                     controller.insertPicture(into: deck)
                 }
+                IconButton(label: "Generate a picture with AI…", icon: "wand.and.stars", shortcut: "⌥⌘I") {
+                    showsPicturePopover.toggle()
+                }
+                .popover(isPresented: $showsPicturePopover, arrowEdge: .bottom) {
+                    PicturePopover(isPresented: $showsPicturePopover)
+                        .environmentObject(deck)
+                        .environmentObject(generator)
+                }
                 layoutMenu
             }
         }
+        .onChange(of: ui.pictureRequest) { _, _ in showsPicturePopover = true }
     }
 
     // MARK: Pieces

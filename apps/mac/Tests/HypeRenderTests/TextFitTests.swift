@@ -63,6 +63,52 @@ final class TextFitTests: XCTestCase {
         XCTAssertGreaterThan(result.headlineSize, 150)
     }
 
+    // MARK: Tables, code, and the "too much text" flag
+
+    func testASmallTableFitsWholeAndReadable() {
+        let result = fit("# Plans\n\n| Plan | Price |\n| --- | ---: |\n| Starter | $9 |\n| Team | $29 |")
+        XCTAssertEqual(result.wrappedLines, 0)
+        XCTAssertLessThanOrEqual(result.height, area.height)
+        XCTAssertGreaterThanOrEqual(result.bodySize, comfortableBodySize)
+        XCTAssertFalse(result.isCramped)
+    }
+
+    func testAWideTableWrapsItsLongCellsButStaysInsideTheSlide() {
+        let notes = "Strong enterprise demand across the board this quarter"
+        let table = "| Region | Q1 | Q2 | Notes |\n| --- | --- | --- | --- |\n| North America | 1 | 2 | \(notes) |\n| Europe | 3 | 4 | \(notes) |"
+        let result = fit("# Big table\n\n" + table)
+        XCTAssertGreaterThan(result.wrappedLines, 0)
+        XCTAssertLessThanOrEqual(result.height, area.height + 1)
+        XCTAssertFalse(result.isCramped, "wrapping the prose column keeps the text readable")
+    }
+
+    func testCodeBlocksFitAndAreNotCrampedUnlessTheyAreHuge() {
+        let short = fit("# Demo\n\n```swift\nlet x = 1\nprint(x)\n```")
+        XCTAssertEqual(short.wrappedLines, 0)
+        XCTAssertLessThanOrEqual(short.height, area.height)
+        XCTAssertFalse(short.isCramped)
+
+        let long = fit("```python\n" + (1...45).map { "value_\($0) = compute(\($0))" }.joined(separator: "\n") + "\n```")
+        XCTAssertTrue(long.isCramped, "45 lines of code can't be read from a room")
+        XCTAssertLessThanOrEqual(long.height, area.height + 1)
+    }
+
+    func testTooMuchTextIsFlaggedAsCrampedAndOrdinarySlidesAreNot() {
+        XCTAssertFalse(fit("# Title\n\n- One\n- Two\n- Three").isCramped)
+        let bullets = (1...30).map { "- Point number \($0) with a few extra words" }.joined(separator: "\n")
+        let result = fit("# Way too much\n\n" + bullets)
+        XCTAssertTrue(result.isCramped)
+        XCTAssertLessThan(result.fittedBodySize, readableBodySize)
+    }
+
+    func testTextScaleDoesNotChangeWhetherASlideIsCramped() {
+        let bullets = (1...30).map { "- Point number \($0) with a few extra words" }.joined(separator: "\n")
+        let normal = fit("# T\n\n" + bullets)
+        let smaller = fit("# T\n\n" + bullets, scale: 0.5)
+        XCTAssertEqual(smaller.fittedBodySize, normal.fittedBodySize, accuracy: 0.01)
+        XCTAssertEqual(smaller.isCramped, normal.isCramped)
+    }
+
     func testTextScaleBelowOneShrinksAndAboveOneNeverOverflows() {
         let base = fit("# Title\n\n- One\n- Two\n- Three")
         XCTAssertLessThan(fit("# Title\n\n- One\n- Two\n- Three", scale: 0.6).bodySize, base.bodySize)

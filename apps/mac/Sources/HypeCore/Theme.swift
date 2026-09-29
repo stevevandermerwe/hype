@@ -3,7 +3,7 @@ import Foundation
 /// A slide color palette: the same nine keys the Qt app reads from an Omarchy
 /// `colors.toml` (`themecatalog.cpp`), plus per-slide overrides (`color_*` front
 /// matter keys).
-public struct Palette: Sendable, Equatable {
+public struct Palette: Sendable, Equatable, Codable {
     public var background: String
     public var foreground: String
     public var accent: String
@@ -13,6 +13,47 @@ public struct Palette: Sendable, Equatable {
     public var magenta: String
     public var cyan: String
     public var darkForeground: String
+
+    /// The nine colour keys, as used after `color_` in front matter.
+    public static let colorKeys = ["background", "foreground", "accent", "green", "red", "yellow", "magenta", "cyan", "dark_foreground"]
+
+    /// The colour for one of `colorKeys`.
+    public subscript(key: String) -> String {
+        get {
+            switch key {
+            case "background": return background
+            case "foreground": return foreground
+            case "accent": return accent
+            case "green": return green
+            case "red": return red
+            case "yellow": return yellow
+            case "magenta": return magenta
+            case "cyan": return cyan
+            default: return darkForeground
+            }
+        }
+        set {
+            switch key {
+            case "background": background = newValue
+            case "foreground": foreground = newValue
+            case "accent": accent = newValue
+            case "green": green = newValue
+            case "red": red = newValue
+            case "yellow": yellow = newValue
+            case "magenta": magenta = newValue
+            case "cyan": cyan = newValue
+            default: darkForeground = newValue
+            }
+        }
+    }
+
+    /// Whether the background is light (its perceived brightness is above the middle).
+    public var isLight: Bool {
+        let hex = background.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard hex.count == 6, let value = UInt32(hex, radix: 16) else { return false }
+        let red = Double((value >> 16) & 0xFF), green = Double((value >> 8) & 0xFF), blue = Double(value & 0xFF)
+        return (0.299 * red + 0.587 * green + 0.114 * blue) / 255 > 0.5
+    }
 
     public static let tokyoNight = Palette(background: "#1a1b26", foreground: "#c0caf5", accent: "#7aa2f7",
                                            green: "#9ece6a", red: "#f7768e", yellow: "#e0af68",
@@ -102,20 +143,11 @@ public enum BundledTheme: String, CaseIterable, Sendable, Identifiable {
 /// The palette named by `theme:` in front matter, with any `color_*` keys
 /// overriding individual colors — matching `ThemeCatalog::paletteForTheme` plus
 /// the override step `Deck::palette()` applies in the Qt app.
-public func palette(forTheme name: String, header: String) -> Palette {
-    var palette = (BundledTheme(rawValue: name) ?? .tokyoNight).palette
-    func override(_ key: String, _ keyPath: WritableKeyPath<Palette, String>) {
+public func palette(forTheme name: String, header: String, store: ThemeStore = .shared) -> Palette {
+    var palette = BundledTheme(rawValue: name)?.palette ?? store.palette(named: name) ?? BundledTheme.tokyoNight.palette
+    for key in Palette.colorKeys {
         let value = scalar(header, "color_\(key)")
-        if !value.isEmpty { palette[keyPath: keyPath] = value }
+        if !value.isEmpty { palette[key] = value }
     }
-    override("background", \.background)
-    override("foreground", \.foreground)
-    override("accent", \.accent)
-    override("green", \.green)
-    override("red", \.red)
-    override("yellow", \.yellow)
-    override("magenta", \.magenta)
-    override("cyan", \.cyan)
-    override("dark_foreground", \.darkForeground)
     return palette
 }

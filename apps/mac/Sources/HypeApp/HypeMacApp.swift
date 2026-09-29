@@ -15,10 +15,13 @@ enum ExportKind { case pdf, html }
 
 @main
 struct HypeMacApp: App {
-    @StateObject private var deck = DeckModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var deck = DeckModel(recovery: .shared)
     @StateObject private var generator = Generator()
     @StateObject private var ui = AppUI()
     @StateObject private var editor = EditorController()
+    @StateObject private var health = SlideHealth()
+    @StateObject private var library = ThemeLibrary()
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
@@ -28,11 +31,13 @@ struct HypeMacApp: App {
                 .environmentObject(generator)
                 .environmentObject(ui)
                 .environmentObject(editor)
+                .environmentObject(health)
+                .environmentObject(library)
                 .frame(minWidth: 960, minHeight: 640)
         }
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Presentation") { deck.newDeck(); ui.showStartPage = false }
+                Button("New Presentation") { if confirmDiscardChanges(deck) { deck.newDeck(); ui.showStartPage = false } }
                     .keyboardShortcut("n", modifiers: .command)
                 Button("Open…") { if chooseAndOpenPresentation(deck) { ui.showStartPage = false } }
                     .keyboardShortcut("o", modifiers: .command)
@@ -56,6 +61,12 @@ struct HypeMacApp: App {
                 Button("Present") { openWindow(id: "presenter") }
                     .keyboardShortcut("p", modifiers: .command)
                     .disabled(deck.count == 0)
+            }
+            CommandGroup(after: .pasteboard) {
+                Divider()
+                Button("Find and Replace…") { openWindow(id: "find") }
+                    .keyboardShortcut("f", modifiers: [.command, .option])
+                    .disabled(ui.showStartPage || deck.count == 0)
             }
             CommandGroup(replacing: .undoRedo) {
                 Button("Undo") { deck.undo() }
@@ -81,6 +92,8 @@ struct HypeMacApp: App {
                     .disabled(deck.textScale <= TextScale.minimum)
                 Button("Default Text Size") { deck.setTextScale(1) }
                     .keyboardShortcut("0", modifiers: .command)
+                Button("New Theme…") { ui.themeDraft = ThemeDraft(name: "", palette: deck.palette, editingSlug: nil) }
+                    .disabled(ui.showStartPage)
                 Divider()
                 Group {
                     Button("Heading") { editor.apply(.heading) }
@@ -112,9 +125,24 @@ struct HypeMacApp: App {
                 }
                 .disabled(ui.editorMode != .slide || ui.showStartPage)
             }
+            CommandMenu("AI") {
+                Button("Ask AI About This Slide…") { ui.openAI(.slideAssist(deck.selected)) }
+                    .keyboardShortcut("j", modifiers: .command)
+                Button("Rewrite Whole Deck…") { ui.openAI(.rewriteDeck) }
+                    .keyboardShortcut("r", modifiers: [.command, .option])
+                Button("Suggest Speaker Notes…") { ui.openAI(.speakerNotes) }
+                    .keyboardShortcut("k", modifiers: [.command, .option])
+                Button("Generate a Picture…") { ui.requestPicturePopover() }
+                    .keyboardShortcut("i", modifiers: [.command, .option])
+                    .disabled(ui.editorMode != .slide)
+                Divider()
+                Button("Generate a Presentation…") { ui.openAI(.generate("plan")) }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+            }
             CommandMenu("Slide") {
                 Button("New Slide") { deck.addSlide() }
                     .keyboardShortcut(.return, modifiers: .command)
+                Menu("New Slide from Template") { TemplateMenuItems(deck: deck) }
                 Button("Duplicate") { deck.duplicateSlide() }
                     .keyboardShortcut("d", modifiers: .command)
                 Button("Delete") { deck.deleteSlide() }
@@ -129,6 +157,14 @@ struct HypeMacApp: App {
                     .disabled(deck.selected >= deck.count - 1)
             }
         }
+
+        Window("Find and Replace", id: "find") {
+            FindReplaceView()
+                .environmentObject(deck)
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 540, height: 560)
+        .commandsRemoved()
 
         Window("AI", id: AIWindow.id) {
             AIWindowContent()
@@ -176,5 +212,25 @@ struct HypeMacApp: App {
             deck.setStatus(error.localizedDescription)
         }
         #endif
+    }
+}
+
+/// Application-level hooks: keeps unsaved edits from being lost when the app
+/// quits, and keeps the recovery copy fresh when you switch away.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// The deck being edited; set by the main window.
+    nonisolated(unsafe) static weak var deck: DeckModel?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let deck = Self.deck, deck.dirty else { return .terminateNow }
+        return MainActor.assumeIsolated { confirmDiscardChanges(deck) } ? .terminateNow : .terminateCancel
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        Self.deck?.flushRecoverySnapshot()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        Self.deck?.flushRecoverySnapshot()
     }
 }

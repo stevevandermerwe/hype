@@ -20,7 +20,7 @@ public enum ImageBackground: String, Sendable, CaseIterable {
 }
 
 /// The image/video reference in `slide`, ignoring any inside code.
-private func firstReference(in slide: String) -> NSTextCheckingResult? {
+func firstReference(in slide: String) -> NSTextCheckingResult? {
     let masked = outsideCode(slide)
     return mediaRe.firstMatch(in: masked, range: NSRange(location: 0, length: (masked as NSString).length))
 }

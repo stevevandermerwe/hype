@@ -1,0 +1,23 @@
+#!/bin/sh
+# Puts the `hype` command-line tool that ships inside Hype.app on your PATH, by
+# linking it into /usr/local/bin (or another folder you name).
+#
+#   bin/install-cli                       links /Applications/Hype.app's tool
+#   bin/install-cli ~/bin                 …into ~/bin instead
+#   HYPE_APP=/path/to/Hype.app bin/install-cli
+set -eu
+APP="${HYPE_APP:-/Applications/Hype.app}"
+DEST="${1:-/usr/local/bin}"
+TOOL="$APP/Contents/MacOS/hype"
+if [ ! -x "$TOOL" ]; then
+    echo "Can't find $TOOL. Install Hype.app first, or set HYPE_APP." >&2
+    exit 1
+fi
+mkdir -p "$DEST" 2>/dev/null || true
+if ln -sf "$TOOL" "$DEST/hype" 2>/dev/null; then
+    echo "Linked $DEST/hype -> $TOOL"
+else
+    echo "Couldn't write to $DEST; trying with sudo…" >&2
+    sudo mkdir -p "$DEST" && sudo ln -sf "$TOOL" "$DEST/hype"
+    echo "Linked $DEST/hype -> $TOOL"
+fi

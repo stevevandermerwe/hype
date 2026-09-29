@@ -12,6 +12,7 @@ struct StartPageView: View {
     var onPlanIt: () -> Void
     var onMindMap: () -> Void
     var onChooseRecent: (String) -> Void
+    var onRecover: (RecoverySnapshot) -> Void
     var onDismiss: () -> Void
 
     fileprivate struct Choice: Identifiable {
@@ -34,6 +35,7 @@ struct StartPageView: View {
     private let contentWidth: CGFloat = 680
 
     @State private var recent: [RecentPresentation] = []
+    @State private var recoverable: [RecoverySnapshot] = []
 
     var body: some View {
         ScrollView {
@@ -42,6 +44,7 @@ struct StartPageView: View {
                 LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(choices) { ChoiceCard(choice: $0) }
                 }
+                if !recoverable.isEmpty { recoveryList }
                 if !recent.isEmpty { recentList }
                 Button(action: onDismiss) {
                     Label("Back to editing", systemImage: "arrow.uturn.backward")
@@ -55,7 +58,7 @@ struct StartPageView: View {
             .frame(maxWidth: .infinity)
         }
         .background(backdrop)
-        .onAppear { recent = RecentPresentations.list() }
+        .onAppear { refresh() }
     }
 
     private var header: some View {
@@ -69,6 +72,42 @@ struct StartPageView: View {
                 Text("Hype").font(.system(size: 40, weight: .bold, design: .rounded))
                 Text("How do you want to start?").font(.title3).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func refresh() {
+        recent = RecentPresentations.list()
+        // The deck open right now has its own snapshot; that isn't something to "recover".
+        recoverable = (deck.recovery?.pending() ?? []).filter { !($0.key == deck.recoveryKey && deck.dirty) }
+    }
+
+    /// Unsaved edits from a session that ended without saving (a crash, or a quit
+    /// that skipped the prompt), offered before anything else.
+    private var recoveryList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Unsaved work from last time", systemImage: "arrow.counterclockwise.circle.fill")
+                .font(.headline).foregroundStyle(.orange)
+            VStack(spacing: 0) {
+                ForEach(Array(recoverable.enumerated()), id: \.element.id) { offset, snapshot in
+                    if offset > 0 { Divider() }
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(snapshot.title).font(.body.weight(.medium))
+                            Text((snapshot.path.map { ($0 as NSString).abbreviatingWithTildeInPath } ?? "Never saved")
+                                 + " · " + snapshot.savedAt.formatted(.relative(presentation: .named)))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        }
+                        Spacer()
+                        Button("Discard") {
+                            deck.recovery?.discard(key: snapshot.key)
+                            refresh()
+                        }
+                        Button("Recover") { onRecover(snapshot) }.buttonStyle(.borderedProminent)
+                    }
+                    .padding(.vertical, 8).padding(.horizontal, 12)
+                }
+            }
+            .card(cornerRadius: 10)
         }
     }
 

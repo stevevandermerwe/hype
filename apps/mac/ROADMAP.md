@@ -97,12 +97,22 @@ different choice clearly better, and note the difference in a comment.
   gruvbox, plus catppuccin, rose-pine, everforest, kanagawa, dracula,
   midnight, and the light catppuccin-latte, rose-pine-dawn, solarized-light,
   and paper, from each theme's upstream palette.
-- Text fitting (`SlideRendering.swift`, tested in `HypeRenderTests`): text is
+- Slide content (`SlideBlocks.swift`): a slide's text is parsed into blocks —
+  headline, body lines, fenced code, tables — that the renderer lays out.
+  Tables are real grids (header row, per-column alignment from `:--`/`:-:`/`--:`,
+  wide cells wrap while narrow columns stay whole). Code is highlighted by a
+  built-in scanner (`SyntaxHighlight.swift`, 18 languages plus aliases, no
+  dependency) on a panel that follows the theme. Known gap: highlighting is a
+  scanner, not a parser, so unusual syntax can be coloured oddly.
+- Text fitting (`TextFitting.swift`, tested in `HypeRenderTests`): text is
   sized as large as it can be with every line kept whole. The headline is
   sized on its own (shrinking to stay on one line) so it doesn't drag the body
   down. Lines wrap only when keeping them whole would leave body text below
   36 units of a 1080-tall slide, or wrapping makes it at least 1.3× bigger
-  while it's under 52. Known gap: wrapped bullet lines don't hang-indent.
+  while it's under 52. A slide that still can't reach 36 is "too full": it gets
+  a badge in the sidebar and light table, a banner with a "Shorten with AI"
+  button, a status-bar count, and a `hype check` warning
+  (`measureSlideText`). Known gap: wrapped bullet lines don't hang-indent.
 - Editor assists (`MarkdownEdit.swift`, `ImageLayout.swift`, `FormatBar.swift`):
   a button bar and Format menu (⌘B/⌘I/⌘U, ⌥⌘1–6, ⇧⌘M) that write the syntax:
   heading (Hype has one level, `# `), bold, italic, underline, inline code,
@@ -117,3 +127,35 @@ different choice clearly better, and note the difference in a comment.
   text: above 1 it raises the size fitted text may grow to, below 1 it
   shrinks the fitted size. The Qt app ignores the key, so such a deck renders
   at its normal fitted size there.
+- `font:` names an installed font (family or PostScript name); slides use it,
+  falling back to the system font when it isn't installed (`hype check` warns).
+  Code stays monospaced. Toolbar font picker; `hype new --font`.
+- Custom themes (`ThemeStore.swift`): one JSON file per theme in
+  `~/Library/Application Support/Hype/Themes` (override with `HYPE_THEMES_DIR`),
+  made in a theme editor (colour wells, live preview, "start from"). Choosing a
+  theme clears stale `color_*` keys; a custom theme's colours are also written
+  into the deck so it looks right on a Mac without the theme. `hype themes` and
+  `hype new --theme` know them.
+
+## Later additions (beyond the four phases)
+
+- **AI:** whole-deck rewrite and speaker-note drafting (both validate the reply
+  and apply as one undo; a wrong slide count or an invented picture is refused
+  or repaired), picture generation from a popover in the format bar, an AI menu,
+  and a fix so Stop really cancels requests. Each window states where the deck
+  is sent before sending it.
+- **Editing:** find and replace across the deck (regex, whole word, match case;
+  picture filenames are never matched), twelve slide templates (title, quote,
+  big number, two columns, …), and dropping pictures/videos onto the preview,
+  a sidebar thumbnail, or the editor (extra files become new slides).
+- **Safety:** recovery snapshots of unsaved edits (`Recovery.swift`, in
+  `~/Library/Application Support/Hype/Recovery`, override `HYPE_RECOVERY_DIR`)
+  offered on the start page after a crash; timestamped backups beside the file
+  (`.hype-backups`, newest ten) before a save overwrites it; and a
+  Save / Don't Save / Cancel prompt before New, Open, or Quit would discard edits.
+- **Packaging:** `bin/package` builds a universal, hardened-runtime `Hype.app`
+  and `Hype-<version>.dmg` in `dist/` (version from `VERSION`), signing with
+  `CODESIGN_IDENTITY` and notarizing with `NOTARY_PROFILE` (or Apple ID
+  variables) when set; the `hype` tool ships inside the app and
+  `bin/install-cli` puts it on your PATH. Unverified here: real Developer ID
+  signing and notarization (they need your Apple credentials).

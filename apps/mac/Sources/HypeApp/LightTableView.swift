@@ -96,12 +96,13 @@ private struct LightTableCell: View {
     let index: Int
     let isSelected: Bool
     let dropEdge: HorizontalEdge?
+    @EnvironmentObject var health: SlideHealth
     @State private var isHovered = false
 
     var body: some View {
         let source = deck.slideSource(at: index)
         VStack(alignment: .leading, spacing: 8) {
-            SlidePreviewView(slideSource: source, baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale)
+            SlidePreviewView(slideSource: source, baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale, fontName: deck.fontName)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -109,6 +110,9 @@ private struct LightTableCell: View {
                                       lineWidth: isSelected ? 3 : 1)
                 )
                 .shadow(color: .black.opacity(isHovered ? 0.3 : 0.18), radius: isHovered ? 10 : 5, y: isHovered ? 5 : 2)
+                .overlay(alignment: .topTrailing) {
+                    if let report = health.report(for: index) { CrampedBadge(report: report).padding(8) }
+                }
             HStack(spacing: 6) {
                 Text("\(index + 1)")
                     .font(.caption.weight(.bold)).monospacedDigit()

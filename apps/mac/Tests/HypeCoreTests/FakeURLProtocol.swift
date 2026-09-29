@@ -9,6 +9,10 @@ final class FakeURLProtocol: URLProtocol {
     nonisolated(unsafe) static var recorded: [Recorded] = []
     nonisolated(unsafe) static var responseStatus = 200
     nonisolated(unsafe) static var responseJSON: [String: Any] = [:]
+    /// When true the request is recorded but never answered, like a slow model.
+    nonisolated(unsafe) static var hang = false
+    /// Replies to send in order (one per request); falls back to `responseJSON` when empty.
+    nonisolated(unsafe) static var queuedJSON: [[String: Any]] = []
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -28,7 +32,9 @@ final class FakeURLProtocol: URLProtocol {
         }) ?? Data()
         let bodyJSON = (try? JSONSerialization.jsonObject(with: bodyData)) as? [String: Any] ?? [:]
         FakeURLProtocol.recorded.append(.init(request: request, bodyJSON: bodyJSON))
-        let payload = (try? JSONSerialization.data(withJSONObject: FakeURLProtocol.responseJSON)) ?? Data()
+        if FakeURLProtocol.hang { return }
+        let reply = FakeURLProtocol.queuedJSON.isEmpty ? FakeURLProtocol.responseJSON : FakeURLProtocol.queuedJSON.removeFirst()
+        let payload = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
         let response = HTTPURLResponse(url: request.url!, statusCode: FakeURLProtocol.responseStatus,
                                        httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -46,5 +52,7 @@ final class FakeURLProtocol: URLProtocol {
         recorded = []
         responseStatus = status
         responseJSON = json
+        hang = false
+        queuedJSON = []
     }
 }

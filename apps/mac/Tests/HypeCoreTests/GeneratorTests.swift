@@ -86,6 +86,29 @@ final class GeneratorTests: XCTestCase {
         XCTAssertEqual(try? String(contentsOfFile: tempDir.appendingPathComponent("taken/keep.txt").path, encoding: .utf8), "mine")
     }
 
+    func testStopCancelsAnInFlightRequest() async throws {
+        FakeURLProtocol.hang = true
+        let target = tempDir.appendingPathComponent("never").path
+        let work = Task { await generator.generate(prompt: "a talk", theme: nil, directory: target, mode: nil) }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertTrue(generator.busy, "the request should still be waiting")
+        generator.cancel()
+        guard case .failure(let error) = await work.value else { return XCTFail("expected a cancelled failure") }
+        XCTAssertEqual(error.message, "Cancelled")
+        XCTAssertFalse(generator.busy)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target), "nothing is written for a cancelled request")
+    }
+
+    func testCancellingTheCallingTaskAlsoStopsTheRequest() async throws {
+        FakeURLProtocol.hang = true
+        let work = Task { await generator.generate(prompt: "a talk", theme: nil, directory: nil, mode: nil) }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        work.cancel() // what closing the AI window does
+        guard case .failure(let error) = await work.value else { return XCTFail("expected a cancelled failure") }
+        XCTAssertEqual(error.message, "Cancelled")
+        XCTAssertFalse(generator.busy)
+    }
+
     func testGenerateNeedsAKeyForARemoteEndpoint() async {
         unsetenv("HYPE_AI_KEY")
         var config = AIConfig()

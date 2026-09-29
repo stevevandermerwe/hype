@@ -1,4 +1,5 @@
 import SwiftUI
+import HypeCore
 
 /// Small shared pieces of the app's look: a rounded "card" surface, a text
 /// area with a placeholder, and a section header. Kept here so the start
@@ -70,6 +71,49 @@ struct WindowHeader: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+/// A wrapping row of tappable suggestions (the AI windows use them for ready-made
+/// instructions); choosing one fills the field above.
+struct SuggestionChips: View {
+    let items: [String]
+    var onPick: (String) -> Void
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
+            ForEach(items, id: \.self) { item in
+                Button { onPick(item) } label: {
+                    Text(item).font(.callout).lineLimit(1)
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
+                        .background(Capsule().fill(.quaternary.opacity(0.6)))
+                        .overlay(Capsule().strokeBorder(.separator))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+/// Says where the deck's text is about to be sent, so nothing leaves the Mac
+/// without the person seeing where.
+struct AIDestinationNote: View {
+    let config: AIConfig
+    let what: String
+
+    var body: some View {
+        let host = URL(string: config.endpoint)?.host ?? "the configured endpoint"
+        Label("\(what) will be sent to \(host) (\(config.model)).", systemImage: "arrow.up.forward.app")
+            .font(.caption).foregroundStyle(.secondary)
+    }
+}
+
+/// Shown when no API key can be found.
+struct NoKeyNote: View {
+    var body: some View {
+        Label("No API key found. Set it up under File → Generate with AI… → Endpoint and model.", systemImage: "key.slash")
+            .font(.caption).foregroundStyle(.red)
     }
 }
 

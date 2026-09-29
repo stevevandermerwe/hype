@@ -11,7 +11,7 @@ public struct SlideEditOutcome { public var slide = ""; public var warnings: [St
 private let separatorLineRe = try! NSRegularExpression(pattern: "^ {0,3}(`{3,}|~{3,})")
 
 /// True when `text` holds a `---` slide separator outside a fenced code block.
-private func hasSlideSeparator(_ text: String) -> Bool {
+func hasSlideSeparator(_ text: String) -> Bool {
     var fenceChar: Character?
     var fenceLength = 0
     for raw in text.components(separatedBy: "\n") {

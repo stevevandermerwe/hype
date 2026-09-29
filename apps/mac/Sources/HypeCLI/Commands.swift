@@ -32,12 +32,17 @@ func cmdNew(_ args: Args) -> Int32 {
     guard let path = args.positional(0) else { return fail("Name the Markdown file to create.") }
     if FileManager.default.fileExists(atPath: path) { return fail("\(path) already exists.") }
     let theme = args.value("theme") ?? "tokyo-night"
-    guard BundledTheme(rawValue: theme) != nil else {
-        return fail("Theme \(theme) is not installed. Installed: " + BundledTheme.allCases.map(\.rawValue).joined(separator: ", "))
+    let choices = themeChoices()
+    guard let chosen = choices.first(where: { $0.id == theme }) else {
+        return fail("Theme \(theme) is not installed. Installed: " + choices.map(\.id).joined(separator: ", "))
     }
     let title = args.value("title") ?? (URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent)
     var header = setScalar("", "title", title)
     header = setScalar(header, "theme", theme)
+    if let font = args.value("font"), !font.isEmpty { header = setScalar(header, "font", font) }
+    if chosen.isCustom { // Bake a custom theme's colours in, so the deck looks right anywhere.
+        for key in Palette.colorKeys { header = setScalar(header, "color_\(key)", chosen.palette[key]) }
+    }
     let source = header + "\n# " + title + "\n"
     let directory = URL(fileURLWithPath: path).deletingLastPathComponent().path
     do {
@@ -56,6 +61,7 @@ func cmdNew(_ args: Args) -> Int32 {
     return 0
 }
 
+@MainActor
 func cmdCheck(_ args: Args) -> Int32 {
     guard let path = args.positional(0) else { return fail("Name a Markdown presentation.") }
     let deck = DeckModel()
@@ -63,6 +69,9 @@ func cmdCheck(_ args: Args) -> Int32 {
     var problems: [(slide: Int, line: Int, severity: String, message: String)] = []
     if !deck.parsed.error.isEmpty {
         problems.append((0, 1, "error", deck.parsed.error))
+    }
+    if !deck.fontName.isEmpty, !isFontAvailable(deck.fontName) {
+        problems.append((0, 1, "warning", "Font \"\(deck.fontName)\" is not installed here; slides use the system font"))
     }
     for index in 0..<deck.count {
         let slide = deck.parsed.slides[index]
@@ -72,6 +81,11 @@ func cmdCheck(_ args: Args) -> Int32 {
         }
         if deck.slideText(at: index).isEmpty {
             problems.append((index + 1, line, "warning", "Empty slide"))
+        }
+        if let report = measureSlideText(source: slide.source, baseDir: deck.baseDir, textScale: deck.textScale, fontName: deck.fontName), report.isCramped {
+            let percent = Int((report.readability * 100).rounded())
+            problems.append((index + 1, line, "warning",
+                             "Too much text: it shrinks to \(percent)% of a readable size. Split the slide or cut words"))
         }
     }
     let errors = problems.filter { $0.severity == "error" }.count
@@ -107,9 +121,10 @@ func cmdSlides(_ args: Args) -> Int32 {
 }
 
 func cmdThemes(_ args: Args) -> Int32 {
-    let names = BundledTheme.allCases.map(\.rawValue)
+    let choices = themeChoices()
+    let names = choices.map(\.id)
     if args.flag("json") {
-        printJSON(["themes": names])
+        printJSON(["themes": names, "custom": choices.filter(\.isCustom).map(\.id)])
     } else {
         for name in names { printLine(name) }
     }

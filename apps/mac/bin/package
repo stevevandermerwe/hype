@@ -1,0 +1,137 @@
+#!/bin/sh
+# Builds a release Hype.app and a Hype-<version>.dmg in apps/mac/dist/, ready to
+# share without bin/run.
+#
+#   bin/package                  universal build (Apple silicon + Intel), ad-hoc signed
+#   bin/package --native         only this Mac's architecture (faster)
+#   bin/package --no-dmg         just the .app
+#
+# Signing and notarization use your Apple Developer credentials, which this script
+# only reads from the environment — it never stores them:
+#
+#   CODESIGN_IDENTITY   "Developer ID Application: Your Name (TEAMID)". Without it the
+#                       app is ad-hoc signed: fine on this Mac, but other Macs will
+#                       warn that it's from an unidentified developer.
+#   NOTARY_PROFILE      a notarytool keychain profile, made once with:
+#                         xcrun notarytool store-credentials NAME --apple-id … --team-id … --password …
+#                       Or set NOTARY_APPLE_ID, NOTARY_TEAM_ID and NOTARY_PASSWORD
+#                       (an app-specific password). Needs CODESIGN_IDENTITY. When set, the
+#                       DMG is submitted to Apple, waited on, and stapled.
+#
+#   HYPE_VERSION        overrides the version in apps/mac/VERSION
+#
+# The `hype` command-line tool is included inside the app
+# (Hype.app/Contents/MacOS/hype); bin/install-cli links it onto your PATH.
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+OUT="$ROOT/dist"
+APP="$OUT/Hype.app"
+VERSION="${HYPE_VERSION:-$(cat "$ROOT/VERSION" 2>/dev/null || echo 0.1.0)}"
+BUILD_NUMBER="${BUILD_NUMBER:-$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)}"
+IDENTITY="${CODESIGN_IDENTITY:--}"
+
+ARCH_FLAGS="--arch arm64 --arch x86_64"
+MAKE_DMG=1
+for argument in "$@"; do
+    case "$argument" in
+        --native) ARCH_FLAGS="" ;;
+        --no-dmg) MAKE_DMG=0 ;;
+        -h|--help) sed -n '2,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "Unknown option: $argument" >&2; exit 2 ;;
+    esac
+done
+
+say() { printf '\n==> %s\n' "$1"; }
+
+say "Building Hype $VERSION ($BUILD_NUMBER) in release mode"
+# shellcheck disable=SC2086
+swift build --package-path "$ROOT" -c release $ARCH_FLAGS
+# shellcheck disable=SC2086
+BIN_DIR="$(swift build --package-path "$ROOT" -c release $ARCH_FLAGS --show-bin-path)"
+
+say "Assembling $APP"
+rm -rf "$OUT"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp "$BIN_DIR/HypeApp" "$APP/Contents/MacOS/Hype"
+cp "$BIN_DIR/hype" "$APP/Contents/MacOS/hype"
+# SwiftPM puts each target's resources in a <Package>_<Target>.bundle beside the
+# binary (here HypeCore's AI prompt templates). Bundle.module finds it in
+# Contents/Resources, for the app and for the bundled `hype` tool alike.
+for bundle in "$BIN_DIR"/*.bundle; do
+    [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
+done
+cp "$ROOT/Icon/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+cat > "$APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>Hype</string>
+    <key>CFBundleDisplayName</key><string>Hype</string>
+    <key>CFBundleIdentifier</key><string>org.omarchy.hype.mac</string>
+    <key>CFBundleExecutable</key><string>Hype</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>$VERSION</string>
+    <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSHumanReadableCopyright</key><string>Hype for Mac, part of Omarchy.</string>
+</dict>
+</plist>
+PLIST
+
+say "Signing with ${CODESIGN_IDENTITY:-an ad-hoc identity (set CODESIGN_IDENTITY for a Developer ID)}"
+SIGN_FLAGS="--force --options runtime"
+[ "$IDENTITY" != "-" ] && SIGN_FLAGS="$SIGN_FLAGS --timestamp"
+# Inside-out: the nested tool first, then the app that contains it.
+# shellcheck disable=SC2086
+codesign $SIGN_FLAGS --sign "$IDENTITY" "$APP/Contents/MacOS/hype"
+# shellcheck disable=SC2086
+codesign $SIGN_FLAGS --sign "$IDENTITY" "$APP"
+codesign --verify --deep --strict --verbose=2 "$APP"
+
+if [ "$MAKE_DMG" = 0 ]; then
+    say "Done: $APP"
+    exit 0
+fi
+
+DMG="$OUT/Hype-$VERSION.dmg"
+say "Creating $DMG"
+STAGING="$(mktemp -d)"
+cp -R "$APP" "$STAGING/"
+ln -s /Applications "$STAGING/Applications"
+hdiutil create -volname "Hype $VERSION" -srcfolder "$STAGING" -ov -format UDZO "$DMG" >/dev/null
+rm -rf "$STAGING"
+if [ "$IDENTITY" != "-" ]; then
+    codesign --force --timestamp --sign "$IDENTITY" "$DMG"
+fi
+hdiutil verify "$DMG" >/dev/null && echo "DMG verified."
+
+notarize() {
+    if [ "$IDENTITY" = "-" ]; then
+        echo "Skipping notarization: it needs CODESIGN_IDENTITY (a Developer ID Application certificate)." >&2
+        return 0
+    fi
+    if [ -n "${NOTARY_PROFILE:-}" ]; then
+        xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
+    elif [ -n "${NOTARY_APPLE_ID:-}" ] && [ -n "${NOTARY_TEAM_ID:-}" ] && [ -n "${NOTARY_PASSWORD:-}" ]; then
+        xcrun notarytool submit "$DMG" --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" \
+            --password "$NOTARY_PASSWORD" --wait
+    else
+        echo "Skipping notarization: set NOTARY_PROFILE (or NOTARY_APPLE_ID, NOTARY_TEAM_ID, NOTARY_PASSWORD)." >&2
+        return 0
+    fi
+    xcrun stapler staple "$DMG"
+    xcrun stapler validate "$DMG"
+}
+say "Notarization"
+notarize
+
+say "Done"
+echo "  App: $APP"
+echo "  DMG: $DMG"
+[ "$IDENTITY" = "-" ] && echo "  (ad-hoc signed: on another Mac, right-click → Open the first time)"
+exit 0

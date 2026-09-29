@@ -16,12 +16,12 @@ public struct GeneratorError: Error, CustomStringConvertible, Sendable {
 @MainActor
 public final class Generator: ObservableObject {
     @Published public var config: AIConfig
-    @Published public private(set) var busy = false
+    @Published public internal(set) var busy = false
     @Published public var status = ""
 
     private let session: URLSession
     private let readKeychain: @Sendable () -> String?
-    private var currentTask: Task<Void, Never>?
+    private var requestTask: Task<(Data, URLResponse), Error>?
 
     public init(config: AIConfig = AIConfigStore.load(), session: URLSession = .shared,
                 readKeychain: @escaping @Sendable () -> String? = { AIKeychain.read() }) {
@@ -34,9 +34,11 @@ public final class Generator: ObservableObject {
     public var keySource: String? { resolveAPIKey(config, readKeychain: readKeychain)?.source }
     public var outputRoot: String { config.outputRoot.isEmpty ? defaultOutputRoot() : config.outputRoot }
 
-    /// Cancels the in-flight request, if any.
+    /// Cancels the in-flight request, if any. The call waiting on it finishes
+    /// with a "Cancelled" failure. (Cancelling the task that called `generate`
+    /// etc., as closing the AI window does, has the same effect.)
     public func cancel() {
-        currentTask?.cancel()
+        requestTask?.cancel()
     }
 
     private static let requestTimeout: TimeInterval = 300
@@ -44,7 +46,7 @@ public final class Generator: ObservableObject {
 
     /// Validates the endpoint/model/key, posts `body`, and returns the raw
     /// reply bytes. Matches `Generator::begin` (`generator.cpp`).
-    private func post(endpoint: String, model: String, body: Data) async -> Result<Data, GeneratorError> {
+    func post(endpoint: String, model: String, body: Data) async -> Result<Data, GeneratorError> {
         guard let url = URL(string: endpoint), let scheme = url.scheme, ["http", "https"].contains(scheme),
               let host = url.host, !host.isEmpty else {
             return .failure(GeneratorError("The endpoint must be an http(s) URL, such as \(AIConfig.defaultEndpoint)"))
@@ -63,8 +65,18 @@ public final class Generator: ObservableObject {
         request.setValue("Hype", forHTTPHeaderField: "X-Title")
         request.httpBody = body
         request.timeoutInterval = Generator.requestTimeout
+        // Run the request in a task of its own so `cancel()` can stop it, and stop
+        // it too if the task awaiting this call is cancelled.
+        let session = self.session
+        let task = Task { try await session.data(for: request) }
+        requestTask = task
+        defer { requestTask = nil }
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
             let http = (response as? HTTPURLResponse)?.statusCode ?? 200
             if http >= 400 {
                 let parsed = parseChatReply(data)

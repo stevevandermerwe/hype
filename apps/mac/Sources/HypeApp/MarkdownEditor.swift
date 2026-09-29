@@ -65,6 +65,9 @@ final class EditorController: ObservableObject {
 struct MarkdownEditor: NSViewRepresentable {
     @Binding var text: String
     let controller: EditorController
+    /// Called when picture or video files are dropped on the editor; return true
+    /// if handled. (Without it a dropped file would paste its path as text.)
+    var onDropFiles: (([URL]) -> Bool)?
 
     static let attributes: [NSAttributedString.Key: Any] = {
         let style = NSMutableParagraphStyle()
@@ -77,9 +80,19 @@ struct MarkdownEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
+        // Built by hand (what `NSTextView.scrollableTextView()` does) so the text view can be ours.
+        let scroll = NSScrollView()
         scroll.drawsBackground = false
-        guard let textView = scroll.documentView as? NSTextView else { return scroll }
+        scroll.hasVerticalScroller = true
+        let textView = MarkdownTextView(frame: NSRect(x: 0, y: 0, width: 400, height: 200))
+        textView.minSize = NSSize(width: 0, height: 0)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        scroll.documentView = textView
+        textView.onDropFiles = onDropFiles
         textView.delegate = context.coordinator
         textView.isRichText = false
         textView.allowsUndo = false // Undo is the deck's (Edit menu), one history for everything.
@@ -103,6 +116,7 @@ struct MarkdownEditor: NSViewRepresentable {
         context.coordinator.parent = self
         guard let textView = scroll.documentView as? NSTextView else { return }
         controller.textView = textView
+        (textView as? MarkdownTextView)?.onDropFiles = onDropFiles
         // Only external changes (undo, another slide, AI edit) differ from the view.
         if textView.string != text, !textView.hasMarkedText() {
             let selection = textView.selectedRange()
@@ -131,5 +145,29 @@ struct MarkdownEditor: NSViewRepresentable {
             MainActor.assumeIsolated { parent.controller.replaceText(with: result.text, selection: result.selection) }
             return true
         }
+    }
+}
+
+/// The editor's text view: picture and video files dropped on it are handed to
+/// `onDropFiles` (which adds them to the slide) instead of pasting their paths.
+final class MarkdownTextView: NSTextView {
+    var onDropFiles: (([URL]) -> Bool)?
+
+    private func mediaURLs(_ info: NSDraggingInfo) -> [URL] {
+        let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self],
+                                                       options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        return mediaFiles(in: urls)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        onDropFiles != nil && !mediaURLs(sender).isEmpty ? .copy : super.draggingEntered(sender)
+    }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        onDropFiles != nil && !mediaURLs(sender).isEmpty ? .copy : super.draggingUpdated(sender)
+    }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = mediaURLs(sender)
+        if !urls.isEmpty, let onDropFiles, onDropFiles(urls) { return true }
+        return super.performDragOperation(sender)
     }
 }

@@ -49,6 +49,35 @@ final class LookTests: XCTestCase {
         XCTAssertEqual(Set(BundledTheme.allCases.map(\.palette.background)).count, BundledTheme.allCases.count)
     }
 
+    // MARK: Fonts
+
+    func testFontNameDefaultsToEmptyMeaningTheSystemFont() {
+        XCTAssertEqual(DeckModel().fontName, "")
+        XCTAssertEqual(DeckModel(source: "---\nfont: \"Georgia\"\n---\n\n# A\n").fontName, "Georgia")
+        XCTAssertEqual(DeckModel(source: "---\nfont: 'Helvetica Neue'\n---\n\n# A\n").fontName, "Helvetica Neue")
+    }
+
+    func testSettingAndClearingTheFontEditsOnlyTheFrontMatterAndCanBeUndone() {
+        let deck = DeckModel()
+        deck.setFontName("Avenir Next")
+        XCTAssertEqual(deck.fontName, "Avenir Next")
+        XCTAssertTrue(deck.source.contains("font: \"Avenir Next\""))
+        XCTAssertTrue(deck.source.hasSuffix("# Your next idea\n"))
+        deck.setFontName("")
+        XCTAssertEqual(deck.fontName, "")
+        XCTAssertFalse(deck.source.contains("font:"), "clearing removes the key")
+        deck.undo()
+        XCTAssertEqual(deck.fontName, "Avenir Next")
+    }
+
+    func testRemoveScalarDropsOnlyThatKey() {
+        let header = "---\ntitle: \"T\"\nfont: \"X\"\ntheme: nord\n---\n"
+        XCTAssertEqual(removeScalar(header, "font"), "---\ntitle: \"T\"\ntheme: nord\n---\n")
+        XCTAssertEqual(removeScalar(header, "missing"), header)
+        XCTAssertEqual(removeScalar("", "font"), "")
+        XCTAssertEqual(removeScalar("---\nfont_size: 3\nfont: 1\n---\n", "font"), "---\nfont_size: 3\n---\n", "a longer key with the same start is kept")
+    }
+
     func testLightThemesAreMarkedLight() {
         XCTAssertTrue(BundledTheme.catppuccinLatte.isLight)
         XCTAssertFalse(BundledTheme.tokyoNight.isLight)

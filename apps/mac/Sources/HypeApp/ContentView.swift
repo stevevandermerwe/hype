@@ -13,8 +13,11 @@ struct ContentView: View {
     @EnvironmentObject var generator: Generator
     @EnvironmentObject var ui: AppUI
     @EnvironmentObject var markdown: EditorController
+    @EnvironmentObject var health: SlideHealth
+    @EnvironmentObject var library: ThemeLibrary
     @Environment(\.openWindow) private var openWindow
     @State private var editorText: String = ""
+    @State private var isStageDropTargeted = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
@@ -27,10 +30,18 @@ struct ContentView: View {
             if ui.showStartPage {
                 StartPageView(
                     onOpen: { if chooseAndOpenPresentation(deck) { ui.showStartPage = false } },
-                    onWingIt: { deck.newDeck(); ui.showStartPage = false },
+                    onWingIt: { if confirmDiscardChanges(deck) { deck.newDeck(); ui.showStartPage = false } },
                     onPlanIt: { ui.openAI(.generate("plan")) },
                     onMindMap: { ui.openAI(.generate("mindmap")) },
-                    onChooseRecent: { path in if deck.loadPath(path) { ui.showStartPage = false } },
+                    onChooseRecent: { path in
+                        if confirmDiscardChanges(deck), deck.loadPath(path) { ui.showStartPage = false }
+                    },
+                    onRecover: { snapshot in
+                        guard confirmDiscardChanges(deck) else { return }
+                        deck.restore(snapshot)
+                        ui.showStartPage = false
+                        deck.setStatus("Recovered your unsaved changes — save to keep them")
+                    },
                     onDismiss: { ui.showStartPage = false }
                 )
                 .transition(.opacity)
@@ -38,6 +49,11 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: ui.showStartPage)
         .onChange(of: ui.aiRequest) { _, _ in openWindow(id: AIWindow.id) }
+        .sheet(item: $ui.themeDraft) { draft in
+            ThemeEditorSheet(draft: draft)
+                .environmentObject(deck)
+                .environmentObject(library)
+        }
     }
 
     private var editor: some View {
@@ -69,7 +85,13 @@ struct ContentView: View {
         }
         .navigationTitle(deck.title + (deck.dirty ? " — Edited" : ""))
         .safeAreaInset(edge: .bottom, spacing: 0) { statusBar }
-        .onAppear { editorText = deck.slideText(at: deck.selected) }
+        .onAppear {
+            AppDelegate.deck = deck
+            editorText = deck.slideText(at: deck.selected)
+            health.refresh(deck)
+        }
+        .onChange(of: deck.parsed) { _, _ in health.refresh(deck) }
+        .onChange(of: deck.textScale) { _, _ in health.refresh(deck) }
         .onChange(of: editorText) { _, newValue in
             if newValue != deck.slideText(at: deck.selected) { deck.editSlide(newValue) }
         }
@@ -85,12 +107,35 @@ struct ContentView: View {
     /// The selected slide, centered on a neutral backdrop with a soft shadow,
     /// so it reads as a slide rather than as part of the window chrome.
     private var stage: some View {
-        SlidePreviewView(slideSource: deck.slideSource(at: deck.selected), baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale)
+        SlidePreviewView(slideSource: deck.slideSource(at: deck.selected), baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale, fontName: deck.fontName)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
             .padding(28)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .underPageBackgroundColor))
+            .overlay(alignment: .bottom) { crampedBanner }
+            .overlay { if isStageDropTargeted { DropHint().padding(20) } }
+            .animation(.easeOut(duration: 0.15), value: isStageDropTargeted)
+            .dropDestination(for: URL.self) { urls, _ in
+                acceptPictureDrop(urls, onto: deck.selected, deck: deck)
+            } isTargeted: { isStageDropTargeted = $0 }
+    }
+
+    /// Shown under the slide when its text had to shrink below a readable size.
+    @ViewBuilder private var crampedBanner: some View {
+        if let report = health.report(for: deck.selected) {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text(crampedDescription(report)).font(.callout)
+                Button("Shorten with AI") { ui.openAI(.slideAssist(deck.selected)) }
+                    .controlSize(.small)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 7)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.orange.opacity(0.5)))
+            .padding(.bottom, 8)
+            .transition(.opacity)
+        }
     }
 
     private var sourcePane: some View {
@@ -108,7 +153,9 @@ struct ContentView: View {
             .padding(.vertical, 4)
             .background(.bar)
             Divider()
-            MarkdownEditor(text: $editorText, controller: markdown)
+            MarkdownEditor(text: $editorText, controller: markdown) { urls in
+                acceptPictureDrop(urls, onto: deck.selected, deck: deck)
+            }
         }
         .background(Color(nsColor: .textBackgroundColor))
     }
@@ -125,8 +172,16 @@ struct ContentView: View {
             .help("Switch between editing one slide and the light table (Cmd+1 / Cmd+2)")
         }
         ToolbarItemGroup {
-            Button { deck.addSlide() } label: { Label("Add Slide", systemImage: "plus.rectangle") }
-                .help("New slide (Cmd+Return)")
+            Menu {
+                Button("Blank Slide") { deck.addSlide() }
+                Divider()
+                TemplateMenuItems(deck: deck)
+            } label: {
+                Label("Add Slide", systemImage: "plus.rectangle")
+            } primaryAction: {
+                deck.addSlide()
+            }
+            .help("New slide (Cmd+Return) — hold for layouts like Title, Quote, and Two columns")
             Button { deck.duplicateSlide() } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
                 .help("Duplicate slide (Cmd+D)")
             Button(role: .destructive) { deck.deleteSlide() } label: { Label("Delete", systemImage: "trash") }
@@ -147,8 +202,8 @@ struct ContentView: View {
                 .help("Bigger text (Cmd++)")
             }
             ThemePickerButton(deck: deck)
+            FontPickerButton(deck: deck)
             Button { ui.openAI(.slideAssist(deck.selected)) } label: { Label("Ask AI", systemImage: "sparkles") }
-                .keyboardShortcut("j", modifiers: .command)
                 .help("Ask AI to change this slide (Cmd+J)")
             Button { openWindow(id: "presenter") } label: { Label("Present", systemImage: "play.fill") }
                 .disabled(deck.count == 0)
@@ -170,6 +225,12 @@ struct ContentView: View {
             Spacer()
             if ui.editorMode == .lightTable {
                 LightTableSizeSlider()
+                Divider().frame(height: 12)
+            }
+            if !health.cramped.isEmpty {
+                Label("\(health.cramped.count) slide\(health.cramped.count == 1 ? "" : "s") with too much text",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
                 Divider().frame(height: 12)
             }
             Text("\(deck.count) slide\(deck.count == 1 ? "" : "s") · Text \(Int((deck.textScale * 100).rounded()))% · \(BundledTheme(rawValue: deck.themeName)?.displayName ?? deck.themeName)")

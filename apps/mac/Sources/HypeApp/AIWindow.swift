@@ -31,6 +31,11 @@ struct AIWindowContent: View {
         switch ui.aiTask {
         case .generate(let mode):
             GenerateSheet(mode: mode, close: close) { path, warnings in
+                // The new presentation is already saved; only opening it would replace unsaved edits.
+                guard confirmDiscardChanges(deck) else {
+                    deck.setStatus("Created \(path) — not opened, so your current edits are untouched")
+                    return
+                }
                 deck.loadPath(path)
                 ui.showStartPage = false
                 deck.setStatus(warnings.isEmpty ? "Created \(path)"
@@ -43,6 +48,12 @@ struct AIWindowContent: View {
                 deck.setStatus(summary + " · Cmd+Z undoes it" + note)
             }
             .id(ui.aiTask)
+        case .rewriteDeck:
+            DeckRewriteSheet(close: close) { summary in deck.setStatus(summary + " · Cmd+Z undoes it") }
+                .id(ui.aiTask)
+        case .speakerNotes:
+            SpeakerNotesSheet(close: close) { summary in deck.setStatus(summary + " · Cmd+Z undoes it") }
+                .id(ui.aiTask)
         case nil:
             // Reached when macOS restores this window at launch with nothing asked of it.
             ContentUnavailableView {

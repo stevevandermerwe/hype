@@ -99,6 +99,13 @@ public func scalar(_ header: String, _ key: String, _ fallback: String = "") -> 
     return value
 }
 
+/// Removes a `key: value` front-matter line (only that exact key), if present.
+public func removeScalar(_ header: String, _ key: String) -> String {
+    let escapedKey = NSRegularExpression.escapedPattern(for: key)
+    let re = try! NSRegularExpression(pattern: "^" + escapedKey + ":[^\\r\\n]*(?:\\r?\\n)?", options: .anchorsMatchLines)
+    return re.stringByReplacingMatches(in: header, range: NSRange(header.startIndex..., in: header), withTemplate: "")
+}
+
 /// Replaces or appends a `key: value` front-matter line, JSON-encoding `value`
 /// exactly as the Qt app's `setScalar` (`deck.cpp`) does.
 public func setScalar(_ header: String, _ key: String, _ value: String) -> String {

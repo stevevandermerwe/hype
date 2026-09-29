@@ -30,7 +30,23 @@ public final class DeckModel: ObservableObject {
     private var undoStack: [(source: String, selected: Int)] = []
     private var redoStack: [(source: String, selected: Int)] = []
 
-    public init(source: String = DeckModel.defaultSource) {
+    /// Where custom themes are looked up (tests give it a temporary folder).
+    public let themes: ThemeStore
+
+    /// Where recovery snapshots of unsaved edits are kept; nil (the default, used
+    /// by the CLI and tests) keeps none. The app passes `RecoveryStore.shared`.
+    public let recovery: RecoveryStore?
+    /// Whether saving over an existing file first keeps a timestamped backup of it.
+    public var keepsBackups = true
+    /// How long after an edit (and its last neighbour) the recovery snapshot is written.
+    public var recoveryDelay: TimeInterval = 2
+    private let sessionID = UUID().uuidString
+    private var recoveryTicket = 0
+    private var snapshotKeysWritten = Set<String>()
+
+    public init(source: String = DeckModel.defaultSource, themes: ThemeStore = .shared, recovery: RecoveryStore? = nil) {
+        self.themes = themes
+        self.recovery = recovery
         self.source = source
         self.savedSource = source
         self.parsed = parseDeck(source)
@@ -43,9 +59,12 @@ public final class DeckModel: ObservableObject {
         return scalar(parsed.header, "title", fallback)
     }
     public var themeName: String { scalar(parsed.header, "theme", "tokyo-night") }
-    public var palette: Palette { HypeCore.palette(forTheme: themeName, header: parsed.header) }
+    public var palette: Palette { HypeCore.palette(forTheme: themeName, header: parsed.header, store: themes) }
     /// Where this deck's `images/`/`videos/` live; empty until it has a path.
     public var baseDir: String { path.map { ($0 as NSString).deletingLastPathComponent } ?? "" }
+
+    /// Every slide's text (padding trimmed), in order.
+    public var slideTexts: [String] { (0..<count).map { slideText(at: $0) } }
 
     public func slideSource(at index: Int) -> String {
         guard parsed.slides.indices.contains(index) else { return "" }
@@ -67,6 +86,55 @@ public final class DeckModel: ObservableObject {
         selected = max(0, min(newSelected ?? selected, count - 1))
         canUndo = !undoStack.isEmpty
         canRedo = !redoStack.isEmpty
+        scheduleRecoverySnapshot()
+    }
+
+    // MARK: Recovery
+
+    /// The recovery key for the deck as it is now: its file's, or this session's if unsaved.
+    public var recoveryKey: String { path.map(RecoveryStore.key(forPath:)) ?? RecoveryStore.untitledKey(sessionID) }
+
+    private func scheduleRecoverySnapshot() {
+        guard recovery != nil else { return }
+        recoveryTicket += 1
+        let ticket = recoveryTicket
+        DispatchQueue.main.asyncAfter(deadline: .now() + recoveryDelay) { [weak self] in
+            guard let self, self.recoveryTicket == ticket else { return }
+            self.flushRecoverySnapshot()
+        }
+    }
+
+    /// Writes the recovery snapshot now if the deck has unsaved edits; if it is
+    /// back to matching its file (say, after undo), removes the snapshot this
+    /// session wrote. (A snapshot from an earlier session is left for the start
+    /// page to offer.)
+    public func flushRecoverySnapshot() {
+        guard let recovery else { return }
+        let key = recoveryKey
+        if dirty {
+            if (try? recovery.snapshot(key: key, source: source, path: path, title: title)) != nil { snapshotKeysWritten.insert(key) }
+        } else if snapshotKeysWritten.remove(key) != nil {
+            recovery.discard(key: key)
+        }
+    }
+
+    /// Removes this deck's snapshot (for "Don't Save", or once it is saved).
+    public func discardRecoverySnapshot() {
+        recovery?.discard(key: recoveryKey)
+        snapshotKeysWritten.remove(recoveryKey)
+    }
+
+    /// Brings a snapshot back as this deck: its text becomes the unsaved edits to
+    /// its file (or to a deck with no file yet), so it can be saved deliberately.
+    public func restore(_ snapshot: RecoverySnapshot) {
+        path = snapshot.path
+        savedSource = snapshot.path.flatMap { try? String(contentsOfFile: $0, encoding: .utf8) } ?? ""
+        undoStack.removeAll(); redoStack.removeAll()
+        apply(snapshot.source, selected: 0, pushUndo: false)
+        canUndo = false; canRedo = false
+        recovery?.discard(key: snapshot.key)
+        if let restoredPath = snapshot.path { RecentPresentations.record(restoredPath) }
+        flushRecoverySnapshot()
     }
 
     public func undo() {
@@ -77,6 +145,7 @@ public final class DeckModel: ObservableObject {
         selected = last.selected
         canUndo = !undoStack.isEmpty
         canRedo = true
+        scheduleRecoverySnapshot()
     }
     public func redo() {
         guard let next = redoStack.popLast() else { return }
@@ -86,6 +155,7 @@ public final class DeckModel: ObservableObject {
         selected = next.selected
         canUndo = true
         canRedo = !redoStack.isEmpty
+        scheduleRecoverySnapshot()
     }
 
     /// Replaces the selected slide's text, rewriting only that slide's bytes.
@@ -113,6 +183,32 @@ public final class DeckModel: ObservableObject {
     /// keeping the front matter.
     private func rebuild(slides: [String], selected newSelected: Int) {
         apply(parsed.header + slides.joined(separator: "---\n"), selected: newSelected)
+    }
+
+    /// Replaces every slide's text at once — one undoable edit that keeps the
+    /// front matter and (clamped) selection. Used for whole-deck AI changes.
+    /// An empty list is ignored.
+    public func replaceSlides(_ texts: [String]) {
+        guard !texts.isEmpty else { return }
+        let last = texts.count - 1
+        let padded = texts.enumerated().map { index, text -> String in
+            let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lead = index > 0 || !parsed.header.isEmpty ? "\n" : ""
+            return lead + body + (index < last ? "\n\n" : "\n")
+        }
+        let updated = parsed.header + padded.joined(separator: "---\n")
+        guard updated != source else { return }
+        apply(updated, selected: min(selected, last))
+    }
+
+    /// Adds a slide with `text` after slide `index` (at the end if `index` is past
+    /// it) and selects it — one undoable edit.
+    public func insertSlide(_ text: String, after index: Int) {
+        var texts = slideTexts
+        let position = min(max(0, index + 1), texts.count)
+        texts.insert(text, at: position)
+        replaceSlides(texts)
+        select(position)
     }
 
     public func select(_ index: Int) { selected = index }
@@ -143,7 +239,42 @@ public final class DeckModel: ObservableObject {
         rebuild(slides: slides, selected: to)
     }
 
-    public func chooseTheme(_ name: String) { setHeaderValue("theme", name) }
+    /// Chooses a theme by name. Colours left in the front matter by an earlier
+    /// choice (which would override the new theme) are cleared; for one of your
+    /// own themes its colours are written in, so the deck looks the same on a
+    /// Mac that doesn't have the theme. One undoable edit.
+    public func chooseTheme(_ name: String) {
+        var header = parsed.header
+        for key in Palette.colorKeys { header = removeScalar(header, "color_\(key)") }
+        header = setScalar(header, "theme", name)
+        if BundledTheme(rawValue: name) == nil, let palette = themes.palette(named: name) {
+            for key in Palette.colorKeys { header = setScalar(header, "color_\(key)", palette[key]) }
+        }
+        replaceHeader(header)
+    }
+
+    /// The deck's `font:` — a font name, or "" for the system font.
+    public var fontName: String { scalar(parsed.header, "font") }
+
+    /// Sets the deck's font, or clears it (system font) when `name` is empty —
+    /// one undoable edit.
+    public func setFontName(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard trimmed != fontName else { return }
+        if trimmed.isEmpty {
+            replaceHeader(removeScalar(parsed.header, "font"))
+        } else {
+            setHeaderValue("font", trimmed)
+        }
+    }
+
+    /// Swaps in a new front-matter block, leaving every slide's bytes alone.
+    private func replaceHeader(_ newHeader: String) {
+        guard newHeader != parsed.header else { return }
+        var utf16 = Array(source.utf16)
+        utf16.replaceSubrange(0..<parsed.header.utf16.count, with: Array(newHeader.utf16))
+        apply(String(utf16CodeUnits: utf16, count: utf16.count))
+    }
 
     /// How much bigger or smaller than fitted size every slide's text renders,
     /// from the `text_scale` front-matter key (1 when absent or unreadable).
@@ -198,11 +329,14 @@ public final class DeckModel: ObservableObject {
     }
     @discardableResult
     public func savePath(_ filePath: String) -> Bool {
+        if keepsBackups { Backups.backupBeforeOverwriting(path: filePath, newContent: source) }
         do {
             try source.write(toFile: filePath, atomically: true, encoding: .utf8)
         } catch { return false }
+        discardRecoverySnapshot()
         path = filePath
         savedSource = source
+        discardRecoverySnapshot()
         return true
     }
 }

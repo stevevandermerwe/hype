@@ -33,6 +33,8 @@ private struct SlideThumbnail: View {
     @ObservedObject var deck: DeckModel
     let index: Int
     let isSelected: Bool
+    @EnvironmentObject var health: SlideHealth
+    @State private var isDropTargeted = false
 
     var body: some View {
         let source = deck.slideSource(at: index)
@@ -43,7 +45,7 @@ private struct SlideThumbnail: View {
                 .frame(width: 18, alignment: .trailing)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 5) {
-                SlidePreviewView(slideSource: source, baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale)
+                SlidePreviewView(slideSource: source, baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale, fontName: deck.fontName)
                     .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
@@ -51,6 +53,9 @@ private struct SlideThumbnail: View {
                                           lineWidth: isSelected ? 2 : 1)
                     )
                     .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+                    .overlay(alignment: .topTrailing) {
+                        if let report = health.report(for: index) { CrampedBadge(report: report).padding(3) }
+                    }
                 Text(title(source))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -58,6 +63,10 @@ private struct SlideThumbnail: View {
             }
         }
         .padding(.vertical, 4)
+        .overlay { if isDropTargeted { DropHint(text: "Add picture").padding(2) } }
+        .dropDestination(for: URL.self) { urls, _ in
+            acceptPictureDrop(urls, onto: index, deck: deck)
+        } isTargeted: { isDropTargeted = $0 }
     }
 
     private func title(_ source: String) -> String {
