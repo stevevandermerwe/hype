@@ -20,15 +20,18 @@ public final class Generator: ObservableObject {
     @Published public var status = ""
 
     private let session: URLSession
+    private let readKeychain: @Sendable () -> String?
     private var currentTask: Task<Void, Never>?
 
-    public init(config: AIConfig = AIConfigStore.load(), session: URLSession = .shared) {
+    public init(config: AIConfig = AIConfigStore.load(), session: URLSession = .shared,
+                readKeychain: @escaping @Sendable () -> String? = { AIKeychain.read() }) {
         self.config = config
         self.session = session
+        self.readKeychain = readKeychain
     }
 
     public func saveSettings() { AIConfigStore.save(config) }
-    public var keySource: String? { resolveAPIKey(config)?.source }
+    public var keySource: String? { resolveAPIKey(config, readKeychain: readKeychain)?.source }
     public var outputRoot: String { config.outputRoot.isEmpty ? defaultOutputRoot() : config.outputRoot }
 
     /// Cancels the in-flight request, if any.
@@ -48,7 +51,7 @@ public final class Generator: ObservableObject {
         }
         guard !model.isEmpty else { return .failure(GeneratorError("Choose a model.")) }
         let isLocal = Generator.localHosts.contains(host) || host.hasSuffix(".localhost")
-        let resolved = resolveAPIKey(config)
+        let resolved = resolveAPIKey(config, readKeychain: readKeychain)
         if resolved == nil, !isLocal {
             let variable = config.keyEnvironmentVariable.isEmpty ? "HYPE_AI_KEY" : config.keyEnvironmentVariable
             return .failure(GeneratorError("No API key. Set \(variable) in the environment, or save one to the Keychain."))

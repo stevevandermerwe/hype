@@ -94,13 +94,16 @@ public enum AIKeychain {
 /// The API key and where it came from, or nil if none is configured anywhere.
 /// Checks `HYPE_AI_KEY`, then the configured variable, then the Keychain —
 /// matching the Qt app's `aiApiKey` (`generator.cpp`).
-public func resolveAPIKey(_ config: AIConfig) -> (key: String, source: String)? {
+/// `readKeychain` is injectable so tests don't pick up a key the developer
+/// has actually saved on their machine.
+public func resolveAPIKey(_ config: AIConfig,
+                          readKeychain: () -> String? = AIKeychain.read) -> (key: String, source: String)? {
     for name in ["HYPE_AI_KEY", config.keyEnvironmentVariable] where !name.isEmpty {
         if let value = ProcessInfo.processInfo.environment[name], !value.isEmpty {
             return (value, "environment variable \(name)")
         }
     }
-    if let value = AIKeychain.read() {
+    if let value = readKeychain() {
         return (value, "the macOS Keychain")
     }
     return nil

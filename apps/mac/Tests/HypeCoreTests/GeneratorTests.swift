@@ -16,7 +16,7 @@ final class GeneratorTests: XCTestCase {
         config.endpoint = "https://fake.test/v1/chat/completions"
         config.imageEndpoint = "https://fake.test/v1/chat/completions"
         setenv("HYPE_AI_KEY", "test-key", 1)
-        generator = Generator(config: config, session: FakeURLProtocol.session())
+        generator = Generator(config: config, session: FakeURLProtocol.session(), readKeychain: { nil })
     }
     override func tearDownWithError() throws {
         unsetenv("HYPE_AI_KEY")
@@ -90,7 +90,7 @@ final class GeneratorTests: XCTestCase {
         unsetenv("HYPE_AI_KEY")
         var config = AIConfig()
         config.endpoint = "https://example.invalid/v1/chat/completions"
-        let generator = Generator(config: config, session: FakeURLProtocol.session())
+        let generator = Generator(config: config, session: FakeURLProtocol.session(), readKeychain: { nil })
         let result = await generator.generate(prompt: "x", theme: nil, directory: nil, mode: nil)
         guard case .failure(let error) = result else { return XCTFail("expected failure") }
         XCTAssertTrue(error.message.contains("OPENROUTER_API_KEY"))

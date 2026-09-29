@@ -7,8 +7,9 @@ import AppKit
 #endif
 
 /// The app's entry point: one presentation window, plus File/Edit/Slide/Present
-/// menu commands, PDF/HTML export, and a presenter window. There is no start
-/// page, AI generation, or CLI yet — see `../../ROADMAP.md` for phase status.
+/// menu commands, PDF/HTML export, a presenter window, and a separate,
+/// resizable AI window (`AIWindow.swift`).
+
 /// Which format `exportPresentation(kind:)` writes.
 enum ExportKind { case pdf, html }
 
@@ -41,7 +42,8 @@ struct HypeMacApp: App {
                 Button("Save As…") { chooseAndSaveAsPresentation(deck) }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
                 Divider()
-                Button("Generate with AI…") { ui.sheet = .generate("plan") }
+                Button("Generate with AI…") { ui.openAI(.generate("plan")) }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
                 Button("Start page") { ui.showStartPage = true }
                 Divider()
                 Button("Export as PDF…") { exportPresentation(kind: .pdf) }
@@ -71,6 +73,17 @@ struct HypeMacApp: App {
                     .disabled(deck.count <= 1)
             }
         }
+
+        Window("AI", id: AIWindow.id) {
+            AIWindowContent()
+                .environmentObject(deck)
+                .environmentObject(generator)
+                .environmentObject(ui)
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 580, height: 560)
+        .defaultPosition(.center)
+        .commandsRemoved()
 
         Window("Presenter", id: "presenter") {
             PresenterView()

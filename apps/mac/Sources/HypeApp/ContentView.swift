@@ -4,13 +4,14 @@ import HypeRender
 
 /// The main window: the slide sidebar, a live preview of the selected slide,
 /// and a Markdown editor for it — the Mac app's counterpart to the Qt
-/// editor's split preview/source layout (Visual mode only in Phase 1; there
-/// is no whole-document Markdown mode or slide overview grid yet). A plain
-/// launch shows the start page over this, matching the Qt app.
+/// editor's split preview/source layout. The preview and editor sit in a
+/// `VSplitView`, so the divider between them can be dragged. A plain launch
+/// shows the start page over this, matching the Qt app.
 struct ContentView: View {
     @EnvironmentObject var deck: DeckModel
     @EnvironmentObject var generator: Generator
     @EnvironmentObject var ui: AppUI
+    @Environment(\.openWindow) private var openWindow
     @State private var editorText: String = ""
 
     var body: some View {
@@ -20,75 +21,33 @@ struct ContentView: View {
                 StartPageView(
                     onOpen: { if chooseAndOpenPresentation(deck) { ui.showStartPage = false } },
                     onWingIt: { deck.newDeck(); ui.showStartPage = false },
-                    onPlanIt: { ui.sheet = .generate("plan") },
-                    onMindMap: { ui.sheet = .generate("mindmap") },
+                    onPlanIt: { ui.openAI(.generate("plan")) },
+                    onMindMap: { ui.openAI(.generate("mindmap")) },
                     onChooseRecent: { path in if deck.loadPath(path) { ui.showStartPage = false } },
                     onDismiss: { ui.showStartPage = false }
                 )
                 .transition(.opacity)
             }
         }
-        .animation(.default, value: ui.showStartPage)
-        .sheet(item: $ui.sheet) { item in
-            switch item {
-            case .generate(let mode):
-                GenerateSheet(mode: mode) { path, warnings in
-                    deck.loadPath(path)
-                    ui.showStartPage = false
-                    deck.setStatus(warnings.isEmpty ? "Created \(path)"
-                        : "Created; \(warnings.count) warning\(warnings.count > 1 ? "s" : ""), run check")
-                }
-            case .slideAssist(let index):
-                SlideAssistSheet(slideIndex: index) { summary, warnings in
-                    let note = warnings.isEmpty ? "" : "; \(warnings.count) warning\(warnings.count > 1 ? "s" : ""), see the slide"
-                    deck.setStatus(summary + " · Cmd+Z undoes it" + note)
-                }
-            }
-        }
+        .animation(.easeInOut(duration: 0.2), value: ui.showStartPage)
+        .onChange(of: ui.aiRequest) { _, _ in openWindow(id: AIWindow.id) }
     }
 
     private var editor: some View {
         NavigationSplitView {
             SlideListView(deck: deck)
-                .navigationSplitViewColumnWidth(min: 160, ideal: 200)
+                .navigationSplitViewColumnWidth(min: 170, ideal: 220, max: 320)
         } detail: {
-            VStack(spacing: 0) {
-                SlidePreviewView(slideSource: deck.slideSource(at: deck.selected), baseDir: deck.baseDir, palette: deck.palette)
-                    .padding()
-                Divider()
-                TextEditor(text: $editorText)
-                    .font(.system(.body, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .frame(minHeight: 160)
+            VSplitView {
+                stage
+                    .frame(minHeight: 200, idealHeight: 460, maxHeight: .infinity)
+                sourcePane
+                    .frame(minHeight: 120, idealHeight: 220, maxHeight: .infinity)
             }
-            .toolbar {
-                ToolbarItemGroup {
-                    Menu {
-                        ForEach(BundledTheme.allCases) { theme in
-                            Button(theme.rawValue) { deck.chooseTheme(theme.rawValue) }
-                        }
-                    } label: { Label("Theme", systemImage: "paintpalette") }
-                    Button { ui.sheet = .slideAssist(deck.selected) } label: { Label("Ask AI", systemImage: "sparkles") }
-                        .keyboardShortcut("j", modifiers: .command)
-                    Button { deck.addSlide() } label: { Label("Add Slide", systemImage: "plus.rectangle") }
-                    Button { deck.duplicateSlide() } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
-                    Button(role: .destructive) { deck.deleteSlide() } label: { Label("Delete", systemImage: "trash") }
-                        .disabled(deck.count <= 1)
-                }
-            }
+            .toolbar { toolbar }
         }
-        .navigationTitle(deck.title + (deck.dirty ? " •" : ""))
-        .safeAreaInset(edge: .bottom) {
-            if !deck.status.isEmpty {
-                Text(deck.status)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.thinMaterial)
-            }
-        }
+        .navigationTitle(deck.title + (deck.dirty ? " — Edited" : ""))
+        .safeAreaInset(edge: .bottom, spacing: 0) { statusBar }
         .onAppear { editorText = deck.slideText(at: deck.selected) }
         .onChange(of: editorText) { _, newValue in
             if newValue != deck.slideText(at: deck.selected) { deck.editSlide(newValue) }
@@ -100,5 +59,85 @@ struct ContentView: View {
             let current = deck.slideText(at: deck.selected)
             if current != editorText { editorText = current }
         }
+    }
+
+    /// The selected slide, centered on a neutral backdrop with a soft shadow,
+    /// so it reads as a slide rather than as part of the window chrome.
+    private var stage: some View {
+        SlidePreviewView(slideSource: deck.slideSource(at: deck.selected), baseDir: deck.baseDir, palette: deck.palette)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
+            .padding(28)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(nsColor: .underPageBackgroundColor))
+    }
+
+    private var sourcePane: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                Text("Markdown")
+                Spacer()
+                Text("Slide \(deck.selected + 1) of \(deck.count)").monospacedDigit()
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14).padding(.vertical, 7)
+            .background(.bar)
+            Divider()
+            TextEditor(text: $editorText)
+                .font(.system(size: 13, design: .monospaced))
+                .lineSpacing(3)
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 10).padding(.vertical, 8)
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+
+    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItemGroup {
+            Button { deck.addSlide() } label: { Label("Add Slide", systemImage: "plus.rectangle") }
+                .help("New slide (Cmd+Return)")
+            Button { deck.duplicateSlide() } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+                .help("Duplicate slide (Cmd+D)")
+            Button(role: .destructive) { deck.deleteSlide() } label: { Label("Delete", systemImage: "trash") }
+                .disabled(deck.count <= 1)
+                .help("Delete slide")
+        }
+        ToolbarItemGroup {
+            Menu {
+                Picker("Theme", selection: Binding(get: { deck.themeName }, set: { deck.chooseTheme($0) })) {
+                    ForEach(BundledTheme.allCases) { Text($0.rawValue).tag($0.rawValue) }
+                }
+                .pickerStyle(.inline)
+            } label: { Label("Theme", systemImage: "paintpalette") }
+                .help("Theme")
+            Button { ui.openAI(.slideAssist(deck.selected)) } label: { Label("Ask AI", systemImage: "sparkles") }
+                .keyboardShortcut("j", modifiers: .command)
+                .help("Ask AI to change this slide (Cmd+J)")
+            Button { openWindow(id: "presenter") } label: { Label("Present", systemImage: "play.fill") }
+                .disabled(deck.count == 0)
+                .help("Present (Cmd+P)")
+        }
+    }
+
+    @ViewBuilder private var statusBar: some View {
+        HStack(spacing: 8) {
+            if generator.busy {
+                ProgressView().controlSize(.mini)
+                Text(generator.status)
+            } else if !deck.status.isEmpty {
+                Image(systemName: "info.circle")
+                Text(deck.status).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer()
+            Text("\(deck.count) slide\(deck.count == 1 ? "" : "s") · \(deck.themeName)")
+                .monospacedDigit()
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12).padding(.vertical, 5)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
     }
 }

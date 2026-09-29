@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// Which sheet is presented over the main window: whole-deck generation
-/// (`"plan"` or `"mindmap"` mode) or the per-slide Ask AI assistant.
-enum ActiveSheet: Identifiable, Equatable {
+/// What the AI window is doing: whole-deck generation (`"plan"` or
+/// `"mindmap"` mode) or the per-slide Ask AI assistant.
+enum AITask: Hashable {
     case generate(String)
     case slideAssist(Int)
-    var id: String {
+
+    var title: String {
         switch self {
-        case .generate(let mode): return "generate-\(mode)"
-        case .slideAssist(let index): return "assist-\(index)"
+        case .generate(let mode): return mode == "mindmap" ? "Mind Map" : "Generate with AI"
+        case .slideAssist(let index): return "Ask AI — Slide \(index + 1)"
         }
     }
 }
@@ -19,5 +20,13 @@ enum ActiveSheet: Identifiable, Equatable {
 @MainActor
 final class AppUI: ObservableObject {
     @Published var showStartPage = true
-    @Published var sheet: ActiveSheet?
+    @Published var aiTask: AITask?
+    /// Bumped on every `openAI` call, so asking again for the same task still
+    /// brings an already-open (possibly buried) AI window back to the front.
+    @Published private(set) var aiRequest = 0
+
+    func openAI(_ task: AITask) {
+        aiTask = task
+        aiRequest += 1
+    }
 }
