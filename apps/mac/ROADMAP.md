@@ -56,9 +56,27 @@ different choice clearly better, and note the difference in a comment.
    them; a deck generated here still looks right in this app, but its `theme:`
    name alone won't carry the exact palette if opened somewhere without that
    theme built in.
-4. **CLI**: a `hype` command-line tool (as a second SPM executable target)
-   mirroring `new`/`check`/`slides`/`render`/`export`/`generate`/`revise`/`themes`,
-   sharing `HypeCore` with the app.
+4. **CLI** (done): a `hype` executable target (`Sources/HypeCLI`) with
+   `new`/`check`/`slides`/`render`/`export`/`generate`/`revise`/`themes`/`help`,
+   mirroring `src/cli.cpp`. Manual argument parsing (`Args.swift`), no external
+   dependency. Every command was run for real and its output inspected — not
+   just compiled: `new`/`check` (including a deliberately broken deck: missing
+   image with the right line number, an empty slide warning, correct exit
+   code), `slides`, `themes`, `render` (single slide and a whole deck, real
+   PNGs at a requested width), `export` (a real multi-page PDF, a real
+   self-contained HTML file), and `generate`/`revise` against a local fake
+   HTTP endpoint (no real API key). This surfaced and fixed a real parser bug:
+   `Args` only recognized `--flag`, not the single-dash `-o` the documented
+   command syntax actually uses. Rendering/export needed extracting the
+   SwiftUI-based renderer out of `HypeApp` into a new shared library,
+   `HypeRender` (`SlidePreviewView`, `drawSlide`, `exportPDF`/`exportHTML`/
+   `renderSlidePNG`), which `HypeApp` now also depends on — so the app and the
+   CLI render every slide identically by construction, not by convention.
+   Known gaps versus the Qt CLI: no PowerPoint export; `check` does not warn
+   when text would render below a readable size (would need threading a
+   measurement path through `HypeRender` not built for this phase); no
+   `--template`/font-related options, since this port has no external-template
+   or font-management story yet.
 
 ## Format notes carried over from the Qt app (see `format.md` for the full spec)
 

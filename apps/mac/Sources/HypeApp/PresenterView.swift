@@ -1,5 +1,6 @@
 import SwiftUI
 import HypeCore
+import HypeRender
 #if canImport(AppKit)
 import AppKit
 #endif

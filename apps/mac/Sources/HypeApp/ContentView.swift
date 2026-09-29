@@ -1,5 +1,6 @@
 import SwiftUI
 import HypeCore
+import HypeRender
 
 /// The main window: the slide sidebar, a live preview of the selected slide,
 /// and a Markdown editor for it — the Mac app's counterpart to the Qt

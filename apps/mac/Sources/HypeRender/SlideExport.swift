@@ -5,12 +5,13 @@ import AppKit
 #endif
 
 /// PDF and HTML export — the Mac app's counterpart to the Qt app's
-/// `exporter.cpp`/`html.cpp`. PowerPoint export is not implemented (a stretch
-/// goal noted in `../../ROADMAP.md`, not required for Phase 2).
-enum ExportError: LocalizedError {
+/// `exporter.cpp`/`html.cpp`. Shared by `HypeApp` (the File menu) and
+/// `HypeCLI` (`export`). PowerPoint export is not implemented (a stretch goal
+/// noted in `../../ROADMAP.md`, not required for Phase 2).
+public enum ExportError: LocalizedError {
     case cannotCreateFile(String)
     case noSlides
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .cannotCreateFile(let path): return "Could not create \(path)"
         case .noSlides: return "This presentation has no slides"
@@ -26,7 +27,7 @@ private let pdfPageSize = CGSize(width: 960, height: 540)
 private let htmlImageSize = CGSize(width: 1920, height: 1080)
 
 @MainActor
-func exportPDF(deck: DeckModel, to url: URL) throws {
+public func exportPDF(deck: DeckModel, to url: URL) throws {
     guard deck.count > 0 else { throw ExportError.noSlides }
     var mediaBox = CGRect(origin: .zero, size: pdfPageSize)
     guard let consumer = CGDataConsumer(url: url as CFURL),
@@ -66,7 +67,7 @@ private func renderPNGBase64(source: String, baseDir: String, palette: Palette) 
 }
 
 @MainActor
-func exportHTML(deck: DeckModel, to url: URL) throws {
+public func exportHTML(deck: DeckModel, to url: URL) throws {
     guard deck.count > 0 else { throw ExportError.noSlides }
     var images: [String] = []
     for index in 0..<deck.count {
@@ -77,6 +78,25 @@ func exportHTML(deck: DeckModel, to url: URL) throws {
     let html = htmlDocument(title: deck.title, backgroundHex: deck.palette.background, imagesBase64: images)
     guard let data = html.data(using: .utf8) else { throw ExportError.cannotCreateFile(url.path) }
     try data.write(to: url, options: .atomic)
+}
+
+/// Renders one slide to a PNG file at `size` (default 4K) — the Mac app's
+/// counterpart to the Qt CLI's `hype render`.
+@MainActor
+public func renderSlidePNG(deck: DeckModel, index: Int, to url: URL, size: CGSize = CGSize(width: 3840, height: 2160)) throws {
+    let view = SlidePreviewView(slideSource: deck.slideSource(at: index), baseDir: deck.baseDir, palette: deck.palette)
+        .frame(width: size.width, height: size.height)
+    let renderer = ImageRenderer(content: view)
+    renderer.proposedSize = ProposedViewSize(size)
+    #if canImport(AppKit)
+    guard let nsImage = renderer.nsImage, let tiff = nsImage.tiffRepresentation,
+          let bitmap = NSBitmapImageRep(data: tiff), let png = bitmap.representation(using: .png, properties: [:]) else {
+        throw ExportError.cannotCreateFile(url.path)
+    }
+    try png.write(to: url, options: .atomic)
+    #else
+    throw ExportError.cannotCreateFile(url.path)
+    #endif
 }
 
 /// A single self-contained HTML file: every slide is a base64 PNG, so it opens

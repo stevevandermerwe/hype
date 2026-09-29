@@ -1,5 +1,6 @@
 import SwiftUI
 import HypeCore
+import HypeRender
 import UniformTypeIdentifiers
 #if canImport(AppKit)
 import AppKit

@@ -1,5 +1,6 @@
 import SwiftUI
 import HypeCore
+import HypeRender
 
 /// The sidebar: one small preview per slide, selectable and reorderable —
 /// the Mac app's counterpart to the Qt editor's slide thumbnail rail.

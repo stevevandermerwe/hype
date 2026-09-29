@@ -1,6 +1,6 @@
 import SwiftUI
 
-extension Color {
+public extension Color {
     /// A `#rrggbb` (or `#rgb`) hex string, as stored in Hype's theme palettes and
     /// `color_*` front matter. Falls back to black for anything unparsable.
     init(hex: String) {
