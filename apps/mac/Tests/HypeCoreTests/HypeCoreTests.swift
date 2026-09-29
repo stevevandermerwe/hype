@@ -98,6 +98,16 @@ final class HypeCoreTests: XCTestCase {
         XCTAssertEqual(deck.count, 2)
     }
 
+    func testSlideProblemsFlagsMissingMediaAndTooManyReferences() {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        XCTAssertEqual(slideProblems("![](missing.png)", base: tmp.path), ["Missing media: missing.png"])
+        XCTAssertTrue(slideProblems("# No media here", base: tmp.path).isEmpty)
+        XCTAssertEqual(slideProblems("![](a.png) ![](b.png)", base: tmp.path).last,
+                       "Use one media item per slide (combine artwork before importing)")
+    }
+
     func testChooseThemeUpdatesFrontMatterAndPalette() {
         let deck = DeckModel()
         XCTAssertEqual(deck.themeName, "tokyo-night")

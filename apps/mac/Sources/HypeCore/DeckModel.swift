@@ -22,6 +22,10 @@ public final class DeckModel: ObservableObject {
     @Published public private(set) var savedSource: String
     @Published public private(set) var canUndo = false
     @Published public private(set) var canRedo = false
+    /// A short status message for the UI to show (export progress/errors,
+    /// AI generation progress) — matches the Qt app's `Deck::status()`.
+    @Published public var status = ""
+    public func setStatus(_ text: String) { status = text }
 
     private var undoStack: [(source: String, selected: Int)] = []
     private var redoStack: [(source: String, selected: Int)] = []

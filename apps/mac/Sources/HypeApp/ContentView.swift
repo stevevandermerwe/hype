@@ -39,6 +39,16 @@ struct ContentView: View {
             }
         }
         .navigationTitle(deck.title + (deck.dirty ? " •" : ""))
+        .safeAreaInset(edge: .bottom) {
+            if !deck.status.isEmpty {
+                Text(deck.status)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.thinMaterial)
+            }
+        }
         .onAppear { editorText = deck.slideText(at: deck.selected) }
         .onChange(of: editorText) { _, newValue in
             if newValue != deck.slideText(at: deck.selected) { deck.editSlide(newValue) }

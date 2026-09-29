@@ -21,10 +21,16 @@ different choice clearly better, and note the difference in a comment.
    preview (headline/bullets/quote/code/table, image fit/span/left/right,
    background, overlay), bundled themes (tokyo-night, nord, gruvbox), undo/redo,
    add/duplicate/delete/move slides. No AI, no export, no CLI yet.
-2. **Present + export**: a presenter window (arrow keys, Space for video),
-   PDF export (vector text, matching the Qt renderer's layout), and HTML export
-   (self-contained, matching `src/html.cpp`'s viewer). PowerPoint export is a
-   stretch goal for this phase, not a requirement.
+2. **Present + export** (done): a presenter window (arrow keys, Space, Home/End
+   navigate; Escape closes), PDF export (real vector text via
+   `ImageRenderer`+`CGContext`, one page per slide at 960×540pt), and HTML
+   export (self-contained, base64 PNGs, matching `src/html.cpp`'s documented
+   viewer: arrows/Space/Page Up/Down/Home/End navigate, F fullscreen, G grid).
+   All three verified against the running app, not just compiled — see
+   `SlideExport.swift` and `PresenterView.swift`. Known gaps: the presenter
+   window doesn't reliably auto-enter fullscreen on open (manual fullscreen
+   still works); no video playback in Present; PowerPoint export is not
+   implemented (a stretch goal, not a requirement for this phase).
 3. **AI generation**: the start page (Open / Wing it / Plan it / Mind map),
    whole-deck generation against an OpenAI-compatible endpoint, and per-slide
    Ask AI (text / diagram / image), matching `src/generator.cpp`'s behavior and
