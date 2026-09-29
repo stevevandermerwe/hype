@@ -79,8 +79,10 @@ struct HypeMacApp: App {
             CommandGroup(before: .toolbar) {
                 Button("Slide") { ui.editorMode = .slide }
                     .keyboardShortcut("1", modifiers: .command)
-                Button("Light Table") { ui.editorMode = .lightTable }
+                Button("Source") { ui.editorMode = .source }
                     .keyboardShortcut("2", modifiers: .command)
+                Button("Light Table") { ui.editorMode = .lightTable }
+                    .keyboardShortcut("3", modifiers: .command)
                 Divider()
             }
             CommandMenu("Format") {
@@ -156,6 +158,12 @@ struct HypeMacApp: App {
                     .keyboardShortcut(.downArrow, modifiers: [.command, .option])
                     .disabled(deck.selected >= deck.count - 1)
             }
+            CommandMenu("Help") {
+                Button("Hype Help") { ui.helpTopic = .help; openWindow(id: "help") }
+                Button("Markdown Format") { ui.helpTopic = .format; openWindow(id: "help") }
+                Button("Keyboard Shortcuts") { ui.helpTopic = .keyboardShortcuts; openWindow(id: "help") }
+                Button("YAML Front Matter") { ui.helpTopic = .yamlFrontMatter; openWindow(id: "help") }
+            }
         }
 
         Window("Find and Replace", id: "find") {
@@ -184,6 +192,15 @@ struct HypeMacApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .defaultSize(width: 1280, height: 720)
+        .commandsRemoved()
+
+        Window("Help", id: "help") {
+            HelpView()
+                .environmentObject(ui)
+                .toolbar { ToolbarItem { HelpToolbar() } }
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 720, height: 800)
         .commandsRemoved()
     }
 

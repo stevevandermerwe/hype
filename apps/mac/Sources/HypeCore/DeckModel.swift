@@ -158,6 +158,28 @@ public final class DeckModel: ObservableObject {
         scheduleRecoverySnapshot()
     }
 
+    /// Validates and applies a new complete Markdown source. Returns `true` when
+    /// the source parses cleanly (slide separators and fenced code blocks) and
+    /// its front matter is valid YAML. Invalid edits set `status` and leave the
+    /// deck unchanged, so the source editor can keep the user's text while
+    /// showing the problem.
+    @discardableResult
+    public func editSource(_ text: String) -> Bool {
+        guard text != source else { return true }
+        let candidate = parseDeck(text)
+        if !candidate.error.isEmpty {
+            status = candidate.error
+            return false
+        }
+        if !candidate.header.isEmpty, !isValidYAMLHeader(candidate.header) {
+            status = "Front matter is not valid YAML"
+            return false
+        }
+        apply(text)
+        status = ""
+        return true
+    }
+
     /// Replaces the selected slide's text, rewriting only that slide's bytes.
     /// Matches the Qt app's `editSlide` (`deck.cpp`): a no-op edit (the same
     /// text typed back) creates no undo step.

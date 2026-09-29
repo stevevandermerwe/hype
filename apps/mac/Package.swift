@@ -11,13 +11,16 @@ let package = Package(
         .executable(name: "hype", targets: ["HypeCLI"]),
         .library(name: "HypeCore", targets: ["HypeCore"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/jpsim/Yams.git", from: "5.1.0"),
+    ],
     targets: [
         // The file format, deck model, theming and media parsing: no UI, so it is
         // testable headlessly and shared with both HypeApp and HypeCLI (Phase 4).
         // Resources/*.md are copied verbatim from ../../src/*.md (the Qt app's
         // prompt templates and format guide) so both apps send the same prompts;
         // keep them in sync by hand if either file changes.
-        .target(name: "HypeCore", resources: [.copy("Resources")]),
+        .target(name: "HypeCore", dependencies: ["Yams"], resources: [.copy("Resources")]),
         // SwiftUI-based slide rendering and PDF/HTML/PNG export — a separate
         // library so HypeCLI can render and export without linking HypeApp's
         // windows/menus/sheets.

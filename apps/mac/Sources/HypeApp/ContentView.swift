@@ -17,6 +17,7 @@ struct ContentView: View {
     @EnvironmentObject var library: ThemeLibrary
     @Environment(\.openWindow) private var openWindow
     @State private var editorText: String = ""
+    @State private var sourceText: String = ""
     @State private var isStageDropTargeted = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
@@ -70,6 +71,8 @@ struct ContentView: View {
                         sourcePane
                             .frame(minHeight: 120, idealHeight: 220, maxHeight: .infinity)
                     }
+                case .source:
+                    sourceEditor
                 case .lightTable:
                     LightTableView(deck: deck) { index in
                         deck.select(index)
@@ -82,12 +85,14 @@ struct ContentView: View {
         .onChange(of: ui.editorMode) { _, mode in
             // The light table already shows every slide, so the sidebar would only repeat it.
             withAnimation { columnVisibility = mode == .lightTable ? .detailOnly : .all }
+            if mode == .source { sourceText = deck.source }
         }
         .navigationTitle(deck.title + (deck.dirty ? " — Edited" : ""))
         .safeAreaInset(edge: .bottom, spacing: 0) { statusBar }
         .onAppear {
             AppDelegate.deck = deck
             editorText = deck.slideText(at: deck.selected)
+            sourceText = deck.source
             health.refresh(deck)
         }
         .onChange(of: deck.parsed) { _, _ in health.refresh(deck) }
@@ -101,6 +106,12 @@ struct ContentView: View {
         .onChange(of: deck.parsed) { _, _ in
             let current = deck.slideText(at: deck.selected)
             if current != editorText { editorText = current }
+        }
+        .onChange(of: sourceText) { _, newValue in
+            if newValue != deck.source { deck.editSource(newValue) }
+        }
+        .onChange(of: deck.source) { _, newValue in
+            if newValue != sourceText { sourceText = newValue }
         }
     }
 
@@ -160,16 +171,42 @@ struct ContentView: View {
         .background(Color(nsColor: .textBackgroundColor))
     }
 
+    /// A plain-text editor for the whole Markdown file, including its YAML
+    /// front matter and every slide separator. Edits are validated before they
+    /// are applied, so a syntax error leaves the deck unchanged.
+    private var sourceEditor: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Source")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(deck.source.count) characters · \(deck.count) slide\(deck.count == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.bar)
+            Divider()
+            MarkdownEditor(text: $sourceText, controller: markdown)
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             Picker("View", selection: $ui.editorMode) {
                 Image(systemName: "rectangle.and.pencil.and.ellipsis").accessibilityLabel("Slide")
                     .tag(EditorMode.slide)
+                Image(systemName: "doc.plaintext").accessibilityLabel("Source")
+                    .tag(EditorMode.source)
                 Image(systemName: "square.grid.3x2").accessibilityLabel("Light Table")
                     .tag(EditorMode.lightTable)
             }
             .pickerStyle(.segmented)
-            .help("Switch between editing one slide and the light table (Cmd+1 / Cmd+2)")
+            .help("Switch between slide, source, and light table (Cmd+1 / Cmd+2 / Cmd+3)")
         }
         ToolbarItemGroup {
             Menu {

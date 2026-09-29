@@ -271,6 +271,16 @@ func cmdRevise(_ args: Args) async -> Int32 {
 }
 
 func cmdHelp(_ args: Args) -> Int32 {
-    printLine("Usage: hype <command> [options]\n\n" + usageSummary)
+    if let topicName = args.positional(0) {
+        guard let topic = HelpTopic(rawValue: topicName),
+              let text = loadHelp(topic) else {
+            printErr("Unknown help topic: \(topicName)")
+            printErr(helpTopicsSummary)
+            return 1
+        }
+        printLine(text)
+        return 0
+    }
+    printLine("Usage: hype <command> [options]\n\n" + usageSummary + "\n\n" + helpTopicsSummary)
     return 0
 }
