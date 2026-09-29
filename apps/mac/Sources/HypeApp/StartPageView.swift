@@ -1,5 +1,6 @@
 import SwiftUI
 import HypeCore
+import AppKit
 
 /// Shown on a plain launch (no file, nothing typed yet): four ways to begin,
 /// in a fixed 2×2 grid, plus the presentations you were last working on.
@@ -59,12 +60,11 @@ struct StartPageView: View {
 
     private var header: some View {
         HStack(spacing: 16) {
-            Image(systemName: "rectangle.stack.fill")
-                .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 64, height: 64)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.accentColor.gradient))
-                .shadow(color: .accentColor.opacity(0.35), radius: 12, y: 6)
+            // The bundle's icon (Icon/AppIcon.icns, shipped by bin/run); a bare
+            // `swift run` binary gets the generic app icon here instead.
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 80, height: 80)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Hype").font(.system(size: 40, weight: .bold, design: .rounded))
                 Text("How do you want to start?").font(.title3).foregroundStyle(.secondary)
