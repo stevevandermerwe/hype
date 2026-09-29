@@ -12,6 +12,7 @@ struct ContentView: View {
     @EnvironmentObject var deck: DeckModel
     @EnvironmentObject var generator: Generator
     @EnvironmentObject var ui: AppUI
+    @EnvironmentObject var markdown: EditorController
     @Environment(\.openWindow) private var openWindow
     @State private var editorText: String = ""
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -94,22 +95,20 @@ struct ContentView: View {
 
     private var sourcePane: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.left.forwardslash.chevron.right")
-                Text("Markdown")
-                Spacer()
-                Text("Slide \(deck.selected + 1) of \(deck.count)").monospacedDigit()
+            HStack(spacing: 8) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    FormatBar(deck: deck, controller: markdown, slideText: editorText)
+                        .padding(.horizontal, 10)
+                }
+                Text("Slide \(deck.selected + 1) of \(deck.count)")
+                    .font(.caption.weight(.medium)).monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .padding(.trailing, 14)
             }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 14).padding(.vertical, 7)
+            .padding(.vertical, 4)
             .background(.bar)
             Divider()
-            TextEditor(text: $editorText)
-                .font(.system(size: 13, design: .monospaced))
-                .lineSpacing(3)
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, 10).padding(.vertical, 8)
+            MarkdownEditor(text: $editorText, controller: markdown)
         }
         .background(Color(nsColor: .textBackgroundColor))
     }

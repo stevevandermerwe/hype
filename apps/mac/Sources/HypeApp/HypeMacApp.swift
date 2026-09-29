@@ -18,6 +18,7 @@ struct HypeMacApp: App {
     @StateObject private var deck = DeckModel()
     @StateObject private var generator = Generator()
     @StateObject private var ui = AppUI()
+    @StateObject private var editor = EditorController()
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
@@ -26,6 +27,7 @@ struct HypeMacApp: App {
                 .environmentObject(deck)
                 .environmentObject(generator)
                 .environmentObject(ui)
+                .environmentObject(editor)
                 .frame(minWidth: 960, minHeight: 640)
         }
         .commands {
@@ -79,6 +81,36 @@ struct HypeMacApp: App {
                     .disabled(deck.textScale <= TextScale.minimum)
                 Button("Default Text Size") { deck.setTextScale(1) }
                     .keyboardShortcut("0", modifiers: .command)
+                Divider()
+                Group {
+                    Button("Heading") { editor.apply(.heading) }
+                        .keyboardShortcut("1", modifiers: [.command, .option])
+                    Button("Bold") { editor.apply(.bold) }
+                        .keyboardShortcut("b", modifiers: .command)
+                    Button("Italic") { editor.apply(.italic) }
+                        .keyboardShortcut("i", modifiers: .command)
+                    Button("Underline") { editor.apply(.underline) }
+                        .keyboardShortcut("u", modifiers: .command)
+                    Button("Inline Code") { editor.apply(.inlineCode) }
+                        .keyboardShortcut("c", modifiers: [.command, .option])
+                    Divider()
+                    Button("Bulleted List") { editor.apply(.bulletList) }
+                        .keyboardShortcut("2", modifiers: [.command, .option])
+                    Button("Numbered List") { editor.apply(.numberedList) }
+                        .keyboardShortcut("3", modifiers: [.command, .option])
+                    Button("Quote") { editor.apply(.quote) }
+                        .keyboardShortcut("4", modifiers: [.command, .option])
+                    Button("Code Block") { editor.apply(.codeBlock(language: "")) }
+                        .keyboardShortcut("5", modifiers: [.command, .option])
+                    Button("Table") { editor.apply(.table) }
+                        .keyboardShortcut("6", modifiers: [.command, .option])
+                    Button("Speaker Note") { editor.apply(.note) }
+                        .keyboardShortcut("n", modifiers: [.command, .option])
+                    Divider()
+                    Button("Insert Picture or Video…") { editor.insertPicture(into: deck) }
+                        .keyboardShortcut("m", modifiers: [.command, .shift])
+                }
+                .disabled(ui.editorMode != .slide || ui.showStartPage)
             }
             CommandMenu("Slide") {
                 Button("New Slide") { deck.addSlide() }

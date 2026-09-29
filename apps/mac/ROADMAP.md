@@ -103,6 +103,16 @@ different choice clearly better, and note the difference in a comment.
   down. Lines wrap only when keeping them whole would leave body text below
   36 units of a 1080-tall slide, or wrapping makes it at least 1.3× bigger
   while it's under 52. Known gap: wrapped bullet lines don't hang-indent.
+- Editor assists (`MarkdownEdit.swift`, `ImageLayout.swift`, `FormatBar.swift`):
+  a button bar and Format menu (⌘B/⌘I/⌘U, ⌥⌘1–6, ⇧⌘M) that write the syntax:
+  heading (Hype has one level, `# `), bold, italic, underline, inline code,
+  bullet and numbered lists, quote, code block (with a language list), table,
+  hidden speaker note, insert picture or video (copied into `images/`/`videos/`),
+  and picture layout (left/right, fit/span, backdrops, darken, loop/mute).
+  Styles toggle and skip a line's `- `/`1. `/`# `/`> ` marker; Return continues
+  a list or quote. The editor is an `NSTextView` (`TextEditor` can't expose its
+  selection on macOS 14). Known gaps: no clear-formatting button, the light
+  table has no assists, and sidebar titles show raw `**` from styled headlines.
 - `text_scale:` (Mac-only extension, 0.5–2, default 1) scales every slide's
   text: above 1 it raises the size fitted text may grow to, below 1 it
   shrinks the fitted size. The Qt app ignores the key, so such a deck renders

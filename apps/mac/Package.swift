@@ -31,5 +31,8 @@ let package = Package(
         // Runs the real text fitter inside a SwiftUI Canvas, so fit/wrap behavior is
         // measured with real fonts rather than assumed.
         .testTarget(name: "HypeRenderTests", dependencies: ["HypeRender", "HypeCore"]),
+        // The editor glue (NSTextView wiring for the assist buttons and Return key) needs
+        // a real text view, so it is tested against the app module itself.
+        .testTarget(name: "HypeAppTests", dependencies: ["HypeApp", "HypeCore"]),
     ]
 )

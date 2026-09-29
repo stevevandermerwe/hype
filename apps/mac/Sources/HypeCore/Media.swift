@@ -25,12 +25,12 @@ public struct Media: Sendable, Equatable {
     public var text = ""
 }
 
-private let mediaRe = try! NSRegularExpression(pattern: #"!\[([^\]]*)\]\((?:<([^>]+)>|([^\s)]+))\)"#)
+let mediaRe = try! NSRegularExpression(pattern: #"!\[([^\]]*)\]\((?:<([^>]+)>|([^\s)]+))\)"#)
 private let commentRe = try! NSRegularExpression(pattern: "<!--[\\s\\S]*?-->")
 private let inlineCodeRe = try! NSRegularExpression(pattern: "(`+)([^`]|`(?!`))*?\\1")
 private let tokenRe = try! NSRegularExpression(pattern: #"([a-z]+)(?:=("(?:[^"\\]|\\.)*"|[^\s]+))?"#)
 private let bareDirectives: Set<String> = ["fit", "span", "left", "right", "loop", "muted"]
-private let videoExtensions: Set<String> = ["mp4", "m4v", "mov", "webm", "mkv"]
+let videoExtensions: Set<String> = ["mp4", "m4v", "mov", "webm", "mkv"]
 
 /// `source` with fenced code, 4-space-indented lines, and (optionally) inline
 /// `code` spans replaced by spaces of the same length, so a later scan for
