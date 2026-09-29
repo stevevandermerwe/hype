@@ -55,6 +55,9 @@ struct ContentView: View {
                 .environmentObject(deck)
                 .environmentObject(library)
         }
+        .sheet(isPresented: $ui.showFrontMatterEditor) {
+            FrontMatterEditorSheet(deck: deck) { ui.editorMode = .source }
+        }
     }
 
     private var editor: some View {
@@ -118,18 +121,25 @@ struct ContentView: View {
     /// The selected slide, centered on a neutral backdrop with a soft shadow,
     /// so it reads as a slide rather than as part of the window chrome.
     private var stage: some View {
-        SlidePreviewView(slideSource: deck.slideSource(at: deck.selected), baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale, fontName: deck.fontName)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
-            .padding(28)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(nsColor: .underPageBackgroundColor))
-            .overlay(alignment: .bottom) { crampedBanner }
-            .overlay { if isStageDropTargeted { DropHint().padding(20) } }
-            .animation(.easeOut(duration: 0.15), value: isStageDropTargeted)
-            .dropDestination(for: URL.self) { urls, _ in
-                acceptPictureDrop(urls, onto: deck.selected, deck: deck)
-            } isTargeted: { isStageDropTargeted = $0 }
+        SlidePreviewView(
+            slideSource: deck.slideSource(at: deck.selected),
+            baseDir: deck.baseDir,
+            palette: deck.palette,
+            textScale: deck.textScale,
+            fontName: deck.fontName,
+            headerOptions: deck.headerOptions(forIndex: deck.selected)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .underPageBackgroundColor))
+        .overlay(alignment: .bottom) { crampedBanner }
+        .overlay { if isStageDropTargeted { DropHint().padding(20) } }
+        .animation(.easeOut(duration: 0.15), value: isStageDropTargeted)
+        .dropDestination(for: URL.self) { urls, _ in
+            acceptPictureDrop(urls, onto: deck.selected, deck: deck)
+        } isTargeted: { isStageDropTargeted = $0 }
     }
 
     /// Shown under the slide when its text had to shrink below a readable size.
@@ -240,6 +250,10 @@ struct ContentView: View {
             }
             ThemePickerButton(deck: deck)
             FontPickerButton(deck: deck)
+            Button { ui.showFrontMatterEditor = true } label: {
+                Label("Front Matter", systemImage: "doc.badge.gearshape")
+            }
+            .help("Edit presentation settings (YAML front matter)")
             Button { ui.openAI(.slideAssist(deck.selected)) } label: { Label("Ask AI", systemImage: "sparkles") }
                 .help("Ask AI to change this slide (Cmd+J)")
             Button { openWindow(id: "presenter") } label: { Label("Present", systemImage: "play.fill") }

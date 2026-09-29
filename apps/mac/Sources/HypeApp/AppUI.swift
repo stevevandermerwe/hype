@@ -37,6 +37,8 @@ final class AppUI: ObservableObject {
     @Published var aiTask: AITask?
     /// The theme being made or edited, shown as a sheet over the main window.
     @Published var themeDraft: ThemeDraft?
+    /// Whether the visual front-matter editor sheet is showing.
+    @Published var showFrontMatterEditor = false
     /// The help topic to display in the Help window.
     @Published var helpTopic: HelpTopic = .help
     /// Bumped on every `openAI` call, so asking again for the same task still

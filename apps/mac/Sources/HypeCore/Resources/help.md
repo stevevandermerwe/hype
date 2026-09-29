@@ -36,7 +36,7 @@ show_page_number: true
 ---
 ```
 
-See **Help → YAML Front Matter** for every supported key.
+Use the **Front Matter…** toolbar button for a visual editor, or **View → Source** to edit the YAML directly. See **Help → YAML Front Matter** for every supported key.
 
 ## Slides
 

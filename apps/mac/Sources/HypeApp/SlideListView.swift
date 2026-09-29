@@ -45,17 +45,24 @@ private struct SlideThumbnail: View {
                 .frame(width: 18, alignment: .trailing)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 5) {
-                SlidePreviewView(slideSource: source, baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale, fontName: deck.fontName)
-                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.12),
-                                          lineWidth: isSelected ? 2 : 1)
-                    )
-                    .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
-                    .overlay(alignment: .topTrailing) {
-                        if let report = health.report(for: index) { CrampedBadge(report: report).padding(3) }
-                    }
+                SlidePreviewView(
+                    slideSource: source,
+                    baseDir: deck.baseDir,
+                    palette: deck.palette,
+                    textScale: deck.textScale,
+                    fontName: deck.fontName,
+                    headerOptions: deck.headerOptions(forIndex: index)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.12),
+                                      lineWidth: isSelected ? 2 : 1)
+                )
+                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+                .overlay(alignment: .topTrailing) {
+                    if let report = health.report(for: index) { CrampedBadge(report: report).padding(3) }
+                }
                 Text(title(source))
                     .font(.caption)
                     .foregroundStyle(.secondary)

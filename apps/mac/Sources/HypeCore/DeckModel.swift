@@ -290,6 +290,198 @@ public final class DeckModel: ObservableObject {
         }
     }
 
+    // MARK: Header & Page Number Front Matter
+
+    /// Whether page numbers are displayed when presenting/rendering.
+    public var showPageNumber: Bool {
+        let raw = scalar(parsed.header, "show_page_number", scalar(parsed.header, "page_number", scalar(parsed.header, "page_numbers", scalar(parsed.header, "show_page_numbers"))))
+        return parseBoolScalar(raw) ?? false
+    }
+
+    /// Sets whether page numbers are displayed in front matter.
+    public func setShowPageNumber(_ show: Bool) {
+        if show {
+            setHeaderValue("show_page_number", "true")
+        } else {
+            var header = parsed.header
+            header = removeScalar(header, "show_page_number")
+            header = removeScalar(header, "page_number")
+            header = removeScalar(header, "page_numbers")
+            header = removeScalar(header, "show_page_numbers")
+            replaceHeader(header)
+        }
+    }
+
+    /// Where the presentation title is placed (.top or .bottom).
+    public var titlePosition: SlideHeaderOptions.TitlePosition {
+        let raw = scalar(parsed.header, "title_position", scalar(parsed.header, "header_position", scalar(parsed.header, "title_location", "top"))).lowercased()
+        return raw == "bottom" ? .bottom : .top
+    }
+
+    /// Sets title position in front matter.
+    public func setTitlePosition(_ position: SlideHeaderOptions.TitlePosition) {
+        setHeaderValue("title_position", position.rawValue)
+    }
+
+    /// Whether the presentation title is displayed in headers/footers.
+    public var showTitle: Bool {
+        let raw = scalar(parsed.header, "show_title", scalar(parsed.header, "title_display"))
+        if let b = parseBoolScalar(raw) { return b }
+        let hasPos = !scalar(parsed.header, "title_position").isEmpty || !scalar(parsed.header, "header_position").isEmpty
+        let hasStyle = !scalar(parsed.header, "title_color").isEmpty || !scalar(parsed.header, "title_style").isEmpty || !scalar(parsed.header, "header_color").isEmpty || !scalar(parsed.header, "header_style").isEmpty
+        return hasPos || hasStyle
+    }
+
+    /// Sets whether the presentation title is displayed in front matter.
+    public func setShowTitle(_ show: Bool) {
+        setHeaderValue("show_title", show ? "true" : "false")
+    }
+
+    /// Custom color hex for presentation title text.
+    public var titleColorHex: String {
+        scalar(parsed.header, "title_color", scalar(parsed.header, "header_color"))
+    }
+
+    /// Sets presentation title color in front matter.
+    public func setTitleColorHex(_ hex: String) {
+        if hex.trimmingCharacters(in: .whitespaces).isEmpty {
+            var header = parsed.header
+            header = removeScalar(header, "title_color")
+            header = removeScalar(header, "header_color")
+            replaceHeader(header)
+        } else {
+            setHeaderValue("title_color", hex)
+        }
+    }
+
+    /// Custom style string for presentation title text (e.g., "bold", "italic", "uppercase").
+    public var titleStyle: String {
+        scalar(parsed.header, "title_style", scalar(parsed.header, "header_style"))
+    }
+
+    /// Sets presentation title style in front matter.
+    public func setTitleStyle(_ style: String) {
+        if style.trimmingCharacters(in: .whitespaces).isEmpty {
+            var header = parsed.header
+            header = removeScalar(header, "title_style")
+            header = removeScalar(header, "header_style")
+            replaceHeader(header)
+        } else {
+            setHeaderValue("title_style", style)
+        }
+    }
+
+    /// Custom color hex for page number text.
+    public var pageNumberColorHex: String {
+        scalar(parsed.header, "page_number_color")
+    }
+
+    /// Position for page number text (.top or .bottom).
+    public var pageNumberPosition: SlideHeaderOptions.PagePosition? {
+        let raw = scalar(parsed.header, "page_number_position", scalar(parsed.header, "page_position")).lowercased()
+        if raw.contains("top") { return .top }
+        if raw.contains("bottom") { return .bottom }
+        return nil
+    }
+
+    /// Sets the page-number position, or removes it (back to the default) when nil.
+    public func setPageNumberPosition(_ position: SlideHeaderOptions.PagePosition?) {
+        if let position {
+            setHeaderValue("page_number_position", position.rawValue)
+        } else {
+            var header = parsed.header
+            header = removeScalar(header, "page_number_position")
+            header = removeScalar(header, "page_position")
+            replaceHeader(header)
+        }
+    }
+
+    /// Sets the page-number color, or clears the override when `hex` is empty.
+    public func setPageNumberColorHex(_ hex: String) {
+        if hex.trimmingCharacters(in: .whitespaces).isEmpty {
+            replaceHeader(removeScalar(parsed.header, "page_number_color"))
+        } else {
+            setHeaderValue("page_number_color", hex)
+        }
+    }
+
+    /// The `title:` scalar exactly as written, or "" when absent (unlike `title`,
+    /// which falls back to the file name).
+    public var titleValue: String { scalar(parsed.header, "title") }
+
+    /// Sets `title:`, or removes it (so the file name is used) when empty.
+    public func setTitle(_ newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            replaceHeader(removeScalar(parsed.header, "title"))
+        } else {
+            setHeaderValue("title", trimmed)
+        }
+    }
+
+    /// The title styles currently set, as a set of lowercase tokens.
+    public var titleStyleTokens: Set<String> {
+        Set(titleStyle.lowercased().split(separator: " ").map(String.init))
+    }
+
+    /// Replaces `title_style` with the given tokens (bold, italic, uppercase,
+    /// underline); an empty set removes the key.
+    public func setTitleStyleTokens(_ tokens: Set<String>) {
+        setTitleStyle(tokens.sorted().joined(separator: " "))
+    }
+
+    // MARK: Per-color overrides (`color_*`)
+
+    /// The `color_*` overrides currently written in the front matter, keyed
+    /// without the `color_` prefix.
+    public var colorOverrides: [String: String] {
+        var result: [String: String] = [:]
+        for key in Palette.colorKeys {
+            let value = scalar(parsed.header, "color_\(key)")
+            if !value.isEmpty { result[key] = value }
+        }
+        return result
+    }
+
+    /// The effective color for a palette key: the `color_*` override when set,
+    /// otherwise the theme's own color.
+    public func colorHex(for key: String) -> String {
+        colorOverrides[key] ?? palette[key]
+    }
+
+    /// Sets one `color_*` override, or removes it (back to the theme's color)
+    /// when `hex` is empty.
+    public func setColorHex(_ hex: String, for key: String) {
+        if hex.trimmingCharacters(in: .whitespaces).isEmpty {
+            replaceHeader(removeScalar(parsed.header, "color_\(key)"))
+        } else {
+            setHeaderValue("color_\(key)", hex)
+        }
+    }
+
+    /// Removes every `color_*` override, returning the deck to its theme.
+    public func clearColorOverrides() {
+        var header = parsed.header
+        for key in Palette.colorKeys { header = removeScalar(header, "color_\(key)") }
+        replaceHeader(header)
+    }
+
+    /// Full header & footer configuration for rendering.
+    public func headerOptions(forIndex index: Int? = nil) -> SlideHeaderOptions {
+        SlideHeaderOptions(
+            showPageNumber: showPageNumber,
+            slideIndex: index,
+            slideCount: count,
+            presentationTitle: title,
+            showTitle: showTitle,
+            titlePosition: titlePosition,
+            titleColorHex: titleColorHex,
+            titleStyle: titleStyle,
+            pageNumberColorHex: pageNumberColorHex,
+            pageNumberPosition: pageNumberPosition
+        )
+    }
+
     /// Swaps in a new front-matter block, leaving every slide's bytes alone.
     private func replaceHeader(_ newHeader: String) {
         guard newHeader != parsed.header else { return }

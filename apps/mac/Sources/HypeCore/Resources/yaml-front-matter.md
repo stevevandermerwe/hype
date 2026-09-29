@@ -57,6 +57,7 @@ Any theme color can be overridden with a `#rrggbb` value:
 
 Any YAML key you add is preserved by Hype. You can use the source editor to add custom metadata such as `author`, `date`, `tags`, or `category`.
 
-## Source view
+## Editing front matter
 
-Open **View → Source** (`⌘2`) to edit the front matter directly as YAML.
+- The **Front Matter…** button in the toolbar (or **Format → Front Matter…**) opens a visual editor with every supported setting, including theme colors and title styling.
+- **View → Source** (`⌘2`) edits the raw YAML directly, and suggests keys as you type inside the `---` block.

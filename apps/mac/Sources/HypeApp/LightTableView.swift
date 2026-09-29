@@ -102,17 +102,24 @@ private struct LightTableCell: View {
     var body: some View {
         let source = deck.slideSource(at: index)
         VStack(alignment: .leading, spacing: 8) {
-            SlidePreviewView(slideSource: source, baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale, fontName: deck.fontName)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(isHovered ? 0.3 : 0.1),
-                                      lineWidth: isSelected ? 3 : 1)
-                )
-                .shadow(color: .black.opacity(isHovered ? 0.3 : 0.18), radius: isHovered ? 10 : 5, y: isHovered ? 5 : 2)
-                .overlay(alignment: .topTrailing) {
-                    if let report = health.report(for: index) { CrampedBadge(report: report).padding(8) }
-                }
+            SlidePreviewView(
+                slideSource: source,
+                baseDir: deck.baseDir,
+                palette: deck.palette,
+                textScale: deck.textScale,
+                fontName: deck.fontName,
+                headerOptions: deck.headerOptions(forIndex: index)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(isHovered ? 0.3 : 0.1),
+                                  lineWidth: isSelected ? 3 : 1)
+            )
+            .shadow(color: .black.opacity(isHovered ? 0.3 : 0.18), radius: isHovered ? 10 : 5, y: isHovered ? 5 : 2)
+            .overlay(alignment: .topTrailing) {
+                if let report = health.report(for: index) { CrampedBadge(report: report).padding(8) }
+            }
             HStack(spacing: 6) {
                 Text("\(index + 1)")
                     .font(.caption.weight(.bold)).monospacedDigit()

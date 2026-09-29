@@ -24,6 +24,11 @@ and `![](demo.mp4)` reads `videos/demo.mp4`.
 title: "My talk"
 theme: tokyo-night
 font: "JetBrains Mono"
+show_page_number: true
+title_position: bottom
+title_color: "#7aa2f7"
+title_style: bold
+page_number_color: "#e0af68"
 ---
 ```
 
@@ -32,6 +37,15 @@ font: "JetBrains Mono"
 overridden with a `#rrggbb` color: `color_background`, `color_foreground`,
 `color_accent`, `color_green`, `color_red`, `color_yellow`, `color_magenta`,
 `color_cyan`, `color_dark_foreground`.
+
+### Page numbers & Title positioning
+
+- `show_page_number: true` (or `page_numbers: true`): Displays 1-indexed slide page numbers in the presentation header/footer.
+- `title_position: top` or `bottom`: Position of the presentation title on the slide (defaults to `top`).
+- `show_title: true` or `false`: Display the presentation title at the chosen position.
+- `title_color: "#rrggbb"`: Custom hex color for the presentation title.
+- `title_style: bold` / `italic` / `uppercase` / `underline`: Text styling applied to the presentation title.
+- `page_number_color: "#rrggbb"`: Custom hex color for page numbers.
 
 ## Slides
 

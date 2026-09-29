@@ -35,8 +35,15 @@ public func exportPDF(deck: DeckModel, to url: URL) throws {
         throw ExportError.cannotCreateFile(url.path)
     }
     for index in 0..<deck.count {
-        let view = SlidePreviewView(slideSource: deck.slideSource(at: index), baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale, fontName: deck.fontName)
-            .frame(width: pdfPageSize.width, height: pdfPageSize.height)
+        let view = SlidePreviewView(
+            slideSource: deck.slideSource(at: index),
+            baseDir: deck.baseDir,
+            palette: deck.palette,
+            textScale: deck.textScale,
+            fontName: deck.fontName,
+            headerOptions: deck.headerOptions(forIndex: index)
+        )
+        .frame(width: pdfPageSize.width, height: pdfPageSize.height)
         let renderer = ImageRenderer(content: view)
         renderer.render { _, drawInContext in
             pdfContext.beginPDFPage(nil)
@@ -50,9 +57,16 @@ public func exportPDF(deck: DeckModel, to url: URL) throws {
 }
 
 @MainActor
-private func renderPNGBase64(source: String, baseDir: String, palette: Palette, textScale: Double, fontName: String) -> String? {
-    let view = SlidePreviewView(slideSource: source, baseDir: baseDir, palette: palette, textScale: textScale, fontName: fontName)
-        .frame(width: htmlImageSize.width, height: htmlImageSize.height)
+private func renderPNGBase64(source: String, baseDir: String, palette: Palette, textScale: Double, fontName: String, headerOptions: SlideHeaderOptions) -> String? {
+    let view = SlidePreviewView(
+        slideSource: source,
+        baseDir: baseDir,
+        palette: palette,
+        textScale: textScale,
+        fontName: fontName,
+        headerOptions: headerOptions
+    )
+    .frame(width: htmlImageSize.width, height: htmlImageSize.height)
     let renderer = ImageRenderer(content: view)
     renderer.proposedSize = ProposedViewSize(htmlImageSize)
     #if canImport(AppKit)
@@ -71,7 +85,14 @@ public func exportHTML(deck: DeckModel, to url: URL) throws {
     guard deck.count > 0 else { throw ExportError.noSlides }
     var images: [String] = []
     for index in 0..<deck.count {
-        guard let base64 = renderPNGBase64(source: deck.slideSource(at: index), baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale, fontName: deck.fontName)
+        guard let base64 = renderPNGBase64(
+            source: deck.slideSource(at: index),
+            baseDir: deck.baseDir,
+            palette: deck.palette,
+            textScale: deck.textScale,
+            fontName: deck.fontName,
+            headerOptions: deck.headerOptions(forIndex: index)
+        )
         else { throw ExportError.cannotCreateFile(url.path) }
         images.append(base64)
     }
@@ -84,8 +105,15 @@ public func exportHTML(deck: DeckModel, to url: URL) throws {
 /// counterpart to the Qt CLI's `hype render`.
 @MainActor
 public func renderSlidePNG(deck: DeckModel, index: Int, to url: URL, size: CGSize = CGSize(width: 3840, height: 2160)) throws {
-    let view = SlidePreviewView(slideSource: deck.slideSource(at: index), baseDir: deck.baseDir, palette: deck.palette, textScale: deck.textScale, fontName: deck.fontName)
-        .frame(width: size.width, height: size.height)
+    let view = SlidePreviewView(
+        slideSource: deck.slideSource(at: index),
+        baseDir: deck.baseDir,
+        palette: deck.palette,
+        textScale: deck.textScale,
+        fontName: deck.fontName,
+        headerOptions: deck.headerOptions(forIndex: index)
+    )
+    .frame(width: size.width, height: size.height)
     let renderer = ImageRenderer(content: view)
     renderer.proposedSize = ProposedViewSize(size)
     #if canImport(AppKit)

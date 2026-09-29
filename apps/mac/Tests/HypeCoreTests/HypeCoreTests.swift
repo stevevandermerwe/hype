@@ -115,4 +115,51 @@ final class HypeCoreTests: XCTestCase {
         XCTAssertEqual(deck.themeName, "nord")
         XCTAssertEqual(deck.palette.accent, "#88c0d0")
     }
+
+    func testSlideHeaderOptionsFrontMatter() {
+        let source = """
+        ---
+        title: "My Presentation"
+        show_page_number: true
+        title_position: bottom
+        title_color: "#ff0000"
+        title_style: "bold uppercase"
+        page_number_color: "#00ff00"
+        ---
+
+        # Slide 1
+
+        ---
+
+        # Slide 2
+        """
+        let deck = DeckModel(source: source)
+        XCTAssertTrue(deck.showPageNumber)
+        XCTAssertEqual(deck.titlePosition, .bottom)
+        XCTAssertTrue(deck.showTitle)
+        XCTAssertEqual(deck.titleColorHex, "#ff0000")
+        XCTAssertEqual(deck.titleStyle, "bold uppercase")
+        XCTAssertEqual(deck.pageNumberColorHex, "#00ff00")
+
+        let opts = deck.headerOptions(forIndex: 1)
+        XCTAssertTrue(opts.showPageNumber)
+        XCTAssertEqual(opts.slideIndex, 1)
+        XCTAssertEqual(opts.slideCount, 2)
+        XCTAssertEqual(opts.presentationTitle, "My Presentation")
+        XCTAssertTrue(opts.showTitle)
+        XCTAssertEqual(opts.titlePosition, .bottom)
+        XCTAssertEqual(opts.titleColorHex, "#ff0000")
+        XCTAssertEqual(opts.titleStyle, "bold uppercase")
+        XCTAssertEqual(opts.pageNumberColorHex, "#00ff00")
+
+        // Mutators
+        deck.setShowPageNumber(false)
+        XCTAssertFalse(deck.showPageNumber)
+        deck.setTitlePosition(.top)
+        XCTAssertEqual(deck.titlePosition, .top)
+        deck.setTitleColorHex("#0000ff")
+        XCTAssertEqual(deck.titleColorHex, "#0000ff")
+        deck.setTitleStyle("italic")
+        XCTAssertEqual(deck.titleStyle, "italic")
+    }
 }

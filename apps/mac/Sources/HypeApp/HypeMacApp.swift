@@ -96,6 +96,8 @@ struct HypeMacApp: App {
                     .keyboardShortcut("0", modifiers: .command)
                 Button("New Theme…") { ui.themeDraft = ThemeDraft(name: "", palette: deck.palette, editingSlug: nil) }
                     .disabled(ui.showStartPage)
+                Button("Front Matter…") { ui.showFrontMatterEditor = true }
+                    .disabled(ui.showStartPage)
                 Divider()
                 Group {
                     Button("Heading") { editor.apply(.heading) }

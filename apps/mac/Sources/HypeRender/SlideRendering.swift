@@ -4,7 +4,7 @@ import HypeCore
 import AppKit
 #endif
 
-private let inlineRe = try! NSRegularExpression(pattern: #"\*\*(.+?)\*\*|\*(.+?)\*|_(.+?)_"#)
+private let inlineRe = try! NSRegularExpression(pattern: #"^\*\*(.+?)\*\*|\*(.+?)\*|_(.+?)_"#)
 
 /// `**bold**`, `*italic*`, and `_underline_` — matches Hype's Markdown dialect
 /// (see `format.md`). Not nested, matching a single-pass reading of the source.
@@ -55,10 +55,77 @@ func aspectScaled(_ imageSize: CGSize, into bounds: CGSize, expanding: Bool) -> 
     return CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
 }
 
+/// Draws presentation title and/or page numbers based on slide header options.
+func drawSlideHeaderAndFooter(_ context: inout GraphicsContext, headerOptions: SlideHeaderOptions, palette: Palette, fontName: String) {
+    guard headerOptions.showTitle || headerOptions.showPageNumber else { return }
+
+    let defaultColor = Color(hex: palette.darkForeground)
+    let resolvedTitleColor: Color = {
+        if !headerOptions.titleColorHex.isEmpty {
+            return Color(hex: headerOptions.titleColorHex)
+        }
+        return defaultColor
+    }()
+    let resolvedPageColor: Color = {
+        if !headerOptions.pageNumberColorHex.isEmpty {
+            return Color(hex: headerOptions.pageNumberColorHex)
+        }
+        if !headerOptions.titleColorHex.isEmpty {
+            return Color(hex: headerOptions.titleColorHex)
+        }
+        return defaultColor
+    }()
+
+    if headerOptions.showTitle, !headerOptions.presentationTitle.isEmpty {
+        let style = headerOptions.titleStyle.lowercased()
+        var textString = headerOptions.presentationTitle
+        if style.contains("uppercase") {
+            textString = textString.uppercased()
+        }
+
+        var font: Font = .system(size: 26, weight: .medium)
+        if !fontName.isEmpty {
+            font = .custom(fontName, size: 26)
+        }
+        if style.contains("bold") {
+            font = font.bold()
+        }
+        if style.contains("italic") {
+            font = font.italic()
+        }
+
+        var text = Text(textString).font(font).foregroundColor(resolvedTitleColor)
+        if style.contains("underline") {
+            text = text.underline()
+        }
+
+        let yPos: CGFloat = (headerOptions.titlePosition == .bottom) ? 1020 : 42
+        context.draw(text, at: CGPoint(x: 130, y: yPos), anchor: .topLeading)
+    }
+
+    if headerOptions.showPageNumber, let slideIndex = headerOptions.slideIndex {
+        let pageStr = "\(slideIndex + 1)"
+        var font: Font = .system(size: 24, weight: .regular, design: .monospaced)
+        if !fontName.isEmpty {
+            font = .custom(fontName, size: 24)
+        }
+        let text = Text(pageStr).font(font).foregroundColor(resolvedPageColor)
+
+        let pageYPos: CGFloat
+        if let pos = headerOptions.pageNumberPosition {
+            pageYPos = (pos == .top) ? 42 : 1020
+        } else {
+            pageYPos = (headerOptions.titlePosition == .bottom) ? 1020 : (headerOptions.showTitle ? 42 : 1020)
+        }
+
+        context.draw(text, at: CGPoint(x: 1790, y: pageYPos), anchor: .topTrailing)
+    }
+}
+
 /// Draws one slide (its Markdown source) into `context` in 1920×1080 units —
 /// the Mac app's counterpart to the Qt renderer's `paintSlide`.
 func drawSlide(_ context: inout GraphicsContext, source: String, baseDir: String, palette: Palette,
-               textScale: CGFloat = 1, fontName: String = "") {
+               textScale: CGFloat = 1, fontName: String = "", headerOptions: SlideHeaderOptions = SlideHeaderOptions()) {
     let full = CGRect(x: 0, y: 0, width: 1920, height: 1080)
     context.fill(Path(full), with: .color(Color(hex: palette.background)))
     let media = parseMedia(source, base: baseDir)
@@ -101,6 +168,7 @@ func drawSlide(_ context: inout GraphicsContext, source: String, baseDir: String
     if !trimmedText.isEmpty {
         drawSlideText(&context, text: trimmedText, area: textArea, foreground: foreground, palette: palette, textScale: textScale, fontName: fontName)
     }
+    drawSlideHeaderAndFooter(&context, headerOptions: headerOptions, palette: palette, fontName: fontName)
     if !media.error.isEmpty {
         let banner = CGRect(x: 0, y: 1000, width: 1920, height: 80)
         context.fill(Path(banner), with: .color(Color(hex: "#9b3030")))
