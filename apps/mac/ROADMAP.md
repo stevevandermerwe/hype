@@ -31,10 +31,31 @@ different choice clearly better, and note the difference in a comment.
    window doesn't reliably auto-enter fullscreen on open (manual fullscreen
    still works); no video playback in Present; PowerPoint export is not
    implemented (a stretch goal, not a requirement for this phase).
-3. **AI generation**: the start page (Open / Wing it / Plan it / Mind map),
-   whole-deck generation against an OpenAI-compatible endpoint, and per-slide
-   Ask AI (text / diagram / image), matching `src/generator.cpp`'s behavior and
-   prompt templates (`src/prompt.md`, `src/mindmap.md`, `src/slide-*.md`).
+3. **AI generation** (done): the start page (Open / Wing it / Plan it / Mind
+   map, with a Recent list), whole-deck generation against an OpenAI-compatible
+   endpoint, and per-slide Ask AI (text / diagram / image), matching
+   `src/generator.cpp`'s behavior. The bundled prompt templates
+   (`Sources/HypeCore/Resources/*.md`) are copied verbatim from
+   `src/{prompt,mindmap,slide-text,slide-diagram,format}.md` — keep them in
+   sync by hand if either side changes. The API key comes from `HYPE_AI_KEY`,
+   the configured environment variable, or the macOS Keychain (via the
+   `Security` framework directly, not shelling out). 21 unit tests
+   (`GeneratorTests.swift`) exercise the whole pipeline — request building, key
+   resolution, reply parsing, path-safety, file writing, theme application,
+   warnings — against a mocked `URLProtocol`, mirroring the Qt app's
+   `test_generate.py`. The UI (start page, Generate sheet, Ask AI sheet) was
+   verified visually and its layout/controls exercised live; a full live
+   network round-trip through the GUI against a local fake endpoint was
+   attempted but not completed — AppleScript-driven text-field targeting in
+   this environment proved too unreliable to trust against a real desktop
+   session (it also nearly interacted with an unrelated app), so that step was
+   abandoned in favor of the code-level test coverage above. Known gap: unlike
+   the Qt app, `DeckModel.chooseTheme` does not bake `color_*` overrides into
+   the file — bundled themes are a fixed set resolved by name at render time,
+   not discovered from disk paths, so there is no portability need for baking
+   them; a deck generated here still looks right in this app, but its `theme:`
+   name alone won't carry the exact palette if opened somewhere without that
+   theme built in.
 4. **CLI**: a `hype` command-line tool (as a second SPM executable target)
    mirroring `new`/`check`/`slides`/`render`/`export`/`generate`/`revise`/`themes`,
    sharing `HypeCore` with the app.

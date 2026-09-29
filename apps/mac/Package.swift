@@ -13,7 +13,10 @@ let package = Package(
     targets: [
         // The file format, deck model, theming and media parsing: no UI, so it is
         // testable headlessly and shared later with the CLI target (Phase 4).
-        .target(name: "HypeCore"),
+        // Resources/*.md are copied verbatim from ../../src/*.md (the Qt app's
+        // prompt templates and format guide) so both apps send the same prompts;
+        // keep them in sync by hand if either file changes.
+        .target(name: "HypeCore", resources: [.copy("Resources")]),
         .executableTarget(name: "HypeApp", dependencies: ["HypeCore"]),
         .testTarget(name: "HypeCoreTests", dependencies: ["HypeCore"]),
     ]

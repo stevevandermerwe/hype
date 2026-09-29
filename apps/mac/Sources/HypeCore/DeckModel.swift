@@ -162,12 +162,16 @@ public final class DeckModel: ObservableObject {
 
     @discardableResult
     public func loadPath(_ filePath: String) -> Bool {
-        guard let text = try? String(contentsOfFile: filePath, encoding: .utf8) else { return false }
+        guard let text = try? String(contentsOfFile: filePath, encoding: .utf8) else {
+            status = "Could not read \(filePath)"
+            return false
+        }
         path = filePath
         savedSource = text
         undoStack.removeAll(); redoStack.removeAll()
         apply(text, selected: 0, pushUndo: false)
         canUndo = false; canRedo = false
+        RecentPresentations.record(filePath)
         return true
     }
 

@@ -14,27 +14,34 @@ enum ExportKind { case pdf, html }
 @main
 struct HypeMacApp: App {
     @StateObject private var deck = DeckModel()
+    @StateObject private var generator = Generator()
+    @StateObject private var ui = AppUI()
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(deck)
+                .environmentObject(generator)
+                .environmentObject(ui)
                 .frame(minWidth: 960, minHeight: 640)
         }
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Presentation") { deck.newDeck() }
+                Button("New Presentation") { deck.newDeck(); ui.showStartPage = false }
                     .keyboardShortcut("n", modifiers: .command)
-                Button("Open…") { openPresentation() }
+                Button("Open…") { if chooseAndOpenPresentation(deck) { ui.showStartPage = false } }
                     .keyboardShortcut("o", modifiers: .command)
             }
             CommandGroup(after: .newItem) {
                 Divider()
-                Button("Save") { savePresentation() }
+                Button("Save") { saveOrSaveAsPresentation(deck) }
                     .keyboardShortcut("s", modifiers: .command)
-                Button("Save As…") { saveAsPresentation() }
+                Button("Save As…") { chooseAndSaveAsPresentation(deck) }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
+                Divider()
+                Button("Generate with AI…") { ui.sheet = .generate("plan") }
+                Button("Start page") { ui.showStartPage = true }
                 Divider()
                 Button("Export as PDF…") { exportPresentation(kind: .pdf) }
                     .keyboardShortcut("e", modifiers: .command)
@@ -74,7 +81,6 @@ struct HypeMacApp: App {
         .commandsRemoved()
     }
 
-    private var markdownType: UTType { UTType(filenameExtension: "md") ?? .plainText }
     private var pdfType: UTType { .pdf }
     private var htmlType: UTType { .html }
 
@@ -98,30 +104,6 @@ struct HypeMacApp: App {
             deck.setStatus("Exported \(url.lastPathComponent)")
         } catch {
             deck.setStatus(error.localizedDescription)
-        }
-        #endif
-    }
-
-    private func openPresentation() {
-        #if canImport(AppKit)
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [markdownType]
-        panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url {
-            deck.loadPath(url.path)
-        }
-        #endif
-    }
-    private func savePresentation() {
-        if deck.path == nil { saveAsPresentation() } else { deck.save() }
-    }
-    private func saveAsPresentation() {
-        #if canImport(AppKit)
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [markdownType]
-        panel.nameFieldStringValue = "presentation.md"
-        if panel.runModal() == .OK, let url = panel.url {
-            deck.savePath(url.path)
         }
         #endif
     }
