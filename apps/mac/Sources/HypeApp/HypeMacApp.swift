@@ -195,9 +195,8 @@ struct HypeMacApp: App {
         .commandsRemoved()
 
         Window("Help", id: "help") {
-            HelpView()
-                .environmentObject(ui)
-                .toolbar { ToolbarItem { HelpToolbar() } }
+            HelpView(topic: $ui.helpTopic)
+                .toolbar { ToolbarItem { HelpToolbar(topic: $ui.helpTopic) } }
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 720, height: 800)

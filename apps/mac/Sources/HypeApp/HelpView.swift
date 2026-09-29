@@ -2,14 +2,16 @@ import SwiftUI
 import HypeCore
 
 /// A scrollable Markdown viewer for bundled help topics. Tables and code blocks
-/// are rendered with AttributedString's full Markdown interpreter.
+/// are rendered with AttributedString's full Markdown interpreter. The topic is
+/// a plain binding rather than an environment object, because a window's toolbar
+/// does not inherit `.environmentObject` applied to its content view.
 struct HelpView: View {
-    @EnvironmentObject var ui: AppUI
+    @Binding var topic: HelpTopic
 
     var body: some View {
         ScrollView {
             Group {
-                if let markdown = loadHelp(ui.helpTopic),
+                if let markdown = loadHelp(topic),
                    let attributed = try? AttributedString(
                         markdown: markdown,
                         options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
@@ -31,12 +33,12 @@ struct HelpView: View {
 
 /// A toolbar with a picker that switches the Help window's topic.
 struct HelpToolbar: View {
-    @EnvironmentObject var ui: AppUI
+    @Binding var topic: HelpTopic
 
     var body: some View {
-        Picker("Topic", selection: $ui.helpTopic) {
-            ForEach(HelpTopic.allCases, id: \.self) { topic in
-                Text(topic.title).tag(topic)
+        Picker("Topic", selection: $topic) {
+            ForEach(HelpTopic.allCases, id: \.self) { item in
+                Text(item.title).tag(item)
             }
         }
         .pickerStyle(.segmented)
