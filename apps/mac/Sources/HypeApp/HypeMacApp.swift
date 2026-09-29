@@ -160,7 +160,7 @@ struct HypeMacApp: App {
                     .keyboardShortcut(.downArrow, modifiers: [.command, .option])
                     .disabled(deck.selected >= deck.count - 1)
             }
-            CommandMenu("Help") {
+            CommandGroup(replacing: .help) {
                 Button("Hype Help") { ui.helpTopic = .help; openWindow(id: "help") }
                 Button("Markdown Format") { ui.helpTopic = .format; openWindow(id: "help") }
                 Button("Keyboard Shortcuts") { ui.helpTopic = .keyboardShortcuts; openWindow(id: "help") }
