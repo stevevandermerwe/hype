@@ -190,7 +190,7 @@ struct ContentView: View {
             .padding(.vertical, 6)
             .background(.bar)
             Divider()
-            MarkdownEditor(text: $sourceText, controller: markdown)
+            MarkdownEditor(text: $sourceText, controller: markdown, autocompleteFrontMatter: true)
         }
         .background(Color(nsColor: .textBackgroundColor))
     }

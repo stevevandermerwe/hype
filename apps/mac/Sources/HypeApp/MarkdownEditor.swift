@@ -68,6 +68,9 @@ struct MarkdownEditor: NSViewRepresentable {
     /// Called when picture or video files are dropped on the editor; return true
     /// if handled. (Without it a dropped file would paste its path as text.)
     var onDropFiles: (([URL]) -> Bool)?
+    /// When true, typing inside the YAML front-matter block offers an
+    /// autocomplete dropdown of available front-matter keys.
+    var autocompleteFrontMatter: Bool = false
 
     static let attributes: [NSAttributedString.Key: Any] = {
         let style = NSMutableParagraphStyle()
@@ -134,6 +137,34 @@ struct MarkdownEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
+            maybeTriggerFrontMatterCompletion(in: textView)
+        }
+
+        /// Offers front-matter key completions when the user types inside the
+        /// `---` block at the top of the file.
+        func textView(_ textView: NSTextView, completions words: [String],
+                      forPartialWordRange charRange: NSRange,
+                      indexOfSelectedItem index: UnsafeMutablePointer<Int>?) -> [String] {
+            guard parent.autocompleteFrontMatter,
+                  frontMatterRange(in: textView.string).contains(charRange.location)
+            else { return [] }
+            let prefix = (textView.string as NSString).substring(with: charRange)
+            let matches = frontMatterKeySuggestions.filter { $0.hasPrefix(prefix) }
+            index?.pointee = matches.isEmpty ? -1 : 0
+            return matches
+        }
+
+        private func maybeTriggerFrontMatterCompletion(in textView: NSTextView) {
+            guard parent.autocompleteFrontMatter else { return }
+            let range = textView.selectedRange()
+            let wordRange = textView.rangeForUserCompletion
+            guard range.length == 0,
+                  frontMatterRange(in: textView.string).contains(range.location),
+                  wordRange.location != NSNotFound,
+                  wordRange.length > 0 else { return }
+            let prefix = (textView.string as NSString).substring(with: wordRange)
+            guard frontMatterKeySuggestions.contains(where: { $0.hasPrefix(prefix) && $0 != prefix }) else { return }
+            textView.complete(nil)
         }
 
         /// Return inside a list or quote continues it; Return on an empty item ends it.
@@ -146,6 +177,21 @@ struct MarkdownEditor: NSViewRepresentable {
             return true
         }
     }
+}
+
+/// The UTF-16 range of the YAML content between the opening and closing `---`
+/// delimiters, or an empty range at location 0 when there is no front matter.
+private func frontMatterRange(in text: String) -> NSRange {
+    let ns = text as NSString
+    guard ns.hasPrefix("---") else { return NSRange(location: 0, length: 0) }
+    let afterOpening = ns.range(of: "\n", options: .literal).location
+    guard afterOpening != NSNotFound else { return NSRange(location: 0, length: 0) }
+    let contentStart = afterOpening + 1
+    let searchRange = NSRange(location: contentStart, length: ns.length - contentStart)
+    let closing = ns.range(of: "\n---", options: .literal, range: searchRange)
+    guard closing.location != NSNotFound else { return NSRange(location: 0, length: 0) }
+    let contentEnd = closing.location + 1
+    return NSRange(location: contentStart, length: max(0, contentEnd - contentStart))
 }
 
 /// The editor's text view: picture and video files dropped on it are handed to

@@ -26,6 +26,19 @@ public func loadHelp(_ topic: HelpTopic) -> String? {
     return try? String(contentsOf: url, encoding: .utf8)
 }
 
+/// Every front-matter key the editor can autocomplete, including the dynamic
+/// `color_*` overrides derived from the theme palette.
+public let frontMatterKeySuggestions: [String] = {
+    var keys = [
+        "title", "theme", "font", "text_scale",
+        "show_page_number", "title_position", "show_title",
+        "title_color", "title_style",
+        "page_number_color", "page_number_position"
+    ]
+    for color in Palette.colorKeys { keys.append("color_\(color)") }
+    return keys.sorted()
+}()
+
 /// A short usage line listing the available help topics.
 public let helpTopicsSummary: String = {
     let topics = HelpTopic.allCases.map { "  \($0.rawValue)" }.joined(separator: "\n")
